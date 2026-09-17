@@ -1,0 +1,17 @@
+# Python cache e compilados
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Variáveis de ambiente e segurança
+.env
+venv/
+env/
+
+# Bancos de dados locais e instâncias
+*.db
+instance/
+
+# Arquivos de sistema operacional
+.DS_Store
+Thumbs.db

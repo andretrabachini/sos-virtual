@@ -1,0 +1,51 @@
+========================================================================
+           GUIA DE DESENVOLVIMENTO: BACK-END - SOS VIRTUAL (V2)
+========================================================================
+
+1. CONFIGURAÇÃO INICIAL DO AMBIENTE
+- Linguagem: Python (Flask)
+- Banco de Dados: MySQL (Local)
+- O banco de dados "sos_virtual" com as tabelas (users, nos, arestas) já foi criado 
+  e modelado por André Trabachini utilizando Listas de Adjacência para Grafos.
+
+2. OBRIGATÓRIO: DEPENDÊNCIAS
+Certifique-se de instalar e manter atualizado no "requirements.txt":
+- flask
+- flask-sqlalchemy
+- pymysql
+- flask-cors
+- networkx
+- python-dateutil
+
+3. ESTRUTURA DE PASTAS E RESPONSABILIDADES
+- database.py: Centraliza a conexão com o MySQL via SQLAlchemy.
+- modelos.py: Contém as classes ORM (User, Nos, Arestas).
+- rotas/: Endpoints da API RESTful que retornam dados em formato JSON.
+- servicos/: Onde reside a lógica de negócios pesada (como o motor de grafos).
+
+4. TAREFAS TÉCNICAS IMEDIATAS (FASE 3)
+
+[TAREFA 1] - Conexão e Modelos
+- Validar se o app.py inicializa o CORS e se o database.py conecta sem erros 
+  ao MySQL local.
+
+[TAREFA 2] - Mock API de Importação e Parcelamento (em simulacoes.py ou rotas/)
+- Criar a rota de upload de extratos (CSV/OFX).
+- Utilizar Expressões Regulares (Regex) para varrer as descrições e identificar 
+  padrões de compras parceladas (ex: "1/3", "Parc 02/05").
+- Implementar um laço de repetição (for) no Python para dividir o valor total 
+  e inserir múltiplas arestas futuras no banco de dados, manipulando a coluna "data" 
+  para avançar mês a mês (usando relativedelta). Isso projeta o impacto no saldo livre.
+
+[TAREFA 3] - Serviço de Grafos (grafos_service.py)
+- Importar o NetworkX (nx.DiGraph()).
+- Criar a função que puxa do MySQL os nós e arestas de um "usuario_id".
+- Implementar a Modelagem Topológica de 4 Camadas injetando na memória os nós 
+  virtuais de Super Fonte (S) e Super Sumidouro (T).
+- Aplicar o algoritmo de Custo Mínimo e Fluxo Máximo (Capacity Scaling) para 
+  gerar a recomendação de roteamento otimizado de pagamentos (priorizando cashback/pesos negativos).
+
+5. INTEGRAÇÃO COM O FRONT-END
+- Todas as respostas da API devem retornar JSON estruturado.
+- O front-end (HTML/JS puro) consumirá os dados via requisições assíncronas (fetch) 
+  nas portas configuradas, utilizando o Cytoscape.js para renderizar o grafo visual.

@@ -1,0 +1,53 @@
+========================================================================
+           GUIA DE DESENVOLVIMENTO: FRONT-END - SOS VIRTUAL (V2)
+========================================================================
+
+1. DIRETRIZES GERAIS DA ARQUITETURA
+- O PHP foi totalmente descartado da aplicação. Todo o front-end é composto 
+  por arquivos estáticos em HTML5, CSS3 e JavaScript (Vanilla).
+- A comunicação com o back-end em Python ocorrerá exclusivamente via requisições 
+  assíncronas (API REST / JSON usando a função fetch() do JavaScript).
+- O front-end está isolado e não processa mais regras de negócio diretamente no servidor.
+
+2. EQUIPE RESPONSÁVEL
+- Luan Antonio e Matheus Brathfish (Desenvolvedores Front-End).
+
+3. ESTRUTURA DOS ARQUIVOS JÁ LIMPOS E DISPONÍVEIS
+- index.html: Tela de login e landing page.
+- cadastro.html: Tela de registro com o checkbox obrigatório de consentimento LGPD.
+- dashboard.html: Painel principal, preparado para receber o renderizador de grafos.
+- transacoes.html: Área de upload de extratos bancários (CSV/OFX) e lançamentos.
+- metas.html: Gestão de objetivos financeiros.
+- assistente.html: Interface do chat de IA.
+- js/features-modal.js: Scripts visuais auxiliares.
+
+4. TAREFAS TÉCNICAS DO FRONT-END (FASES DE IMPLEMENTAÇÃO)
+
+[TAREFA 1] - Validação e LGPD (cadastro.html)
+- Garantir que o formulário de cadastro envie os dados para a API de autenticação 
+  e exiba claramente o termo de consentimento LGPD adicionado via checkbox.
+
+[TAREFA 2] - Aba de Simulações Interativas (dashboard.html ou metas.html)
+- Desenvolver os elementos visuais de controle deslizante (sliders) para a 
+  frequência e o valor de hábitos de consumo.
+- Escrever funções em JavaScript puro que escutem o movimento dos sliders e 
+  atualizem em tempo real os textos de economia projetada (semanal, mensal e anual) 
+  sem recarregar a página.
+
+[TAREFA 3] - Interface de Upload de Extratos (transacoes.html)
+- Criar o componente visual para o usuário anexar o arquivo CSV ou OFX.
+- Escrever o script fetch() em JavaScript para enviar o arquivo via método POST 
+  para a rota correspondente no back-end em Python, exibindo o feedback visual 
+  de sucesso ou erro.
+
+[TAREFA 4] - Renderização do Grafo de Fluxo (dashboard.html)
+- Integrar a biblioteca JavaScript Cytoscape.js no painel principal.
+- Consumir o endpoint da API em Python que retorna o JSON com os nós (contas, 
+  categorias) e arestas (transações com pesos em R$).
+- Desenhar visualmente o mapa de rede (bolinhas e setas direcionadas) no dashboard 
+  para a apresentação perante a banca avaliadora.
+
+5. PADRÃO DE COMUNICAÇÃO COM A API
+- Endpoints do Back-end rodarão em Python (ex: http://localhost:5000/api/...).
+- Tratar adequadamente os retornos em JSON e exibir mensagens de erro amigáveis 
+  caso a API esteja offline ou retorne falhas de validação.

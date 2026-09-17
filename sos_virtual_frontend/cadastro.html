@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Criar Conta — SOS Virtual</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+
+  <style>
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0a0e17;
+      --surface:   #111827;
+      --card:      #161d2e;
+      --border:    #1e2d45;
+      --accent:    #00d4a0;
+      --accent2:   #0099ff;
+      --danger:    #ff5c7a;
+      --success:   #00d4a0;
+      --text:      #e8edf5;
+      --muted:     #7a8aa0;
+      --font-h:    'Syne', sans-serif;
+      --font-b:    'DM Sans', sans-serif;
+      --radius:    14px;
+      --glow:      0 0 40px rgba(0, 212, 160, 0.15);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-b);
+      font-size: 16px;
+      line-height: 1.6;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Grain overlay ── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none;
+    }
+
+    /* ── Nav ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      padding: 1rem 2rem;
+      display: flex; align-items: center; justify-content: space-between;
+      backdrop-filter: blur(20px);
+      background: rgba(10, 14, 23, 0.8);
+      border-bottom: 1px solid rgba(30, 45, 69, 0.6);
+    }
+
+    .logo {
+      font-family: var(--font-h);
+      font-size: 1.25rem;
+      font-weight: 800;
+      color: var(--text);
+      text-decoration: none;
+      letter-spacing: -0.3px;
+    }
+
+    .logo span { color: var(--accent); }
+
+    .btn-nav {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-decoration: none;
+      padding: 0.45rem 1rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      transition: color 0.2s, border-color 0.2s;
+    }
+    .btn-nav:hover { color: var(--text); border-color: var(--accent); }
+
+    /* ── Página central ── */
+    main {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 7rem 1.5rem 4rem;
+      position: relative; z-index: 1;
+    }
+
+    /* ── Glow de fundo ── */
+    main::before {
+      content: '';
+      position: absolute;
+      top: 30%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 500px; height: 500px;
+      background: radial-gradient(ellipse, rgba(0,212,160,0.06) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    /* ── Card ── */
+    .cadastro-wrap { width: 100%; max-width: 480px; }
+
+    .cadastro-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 2.5rem;
+      box-shadow: 0 0 60px rgba(0,0,0,0.4);
+    }
+
+    .card-header { margin-bottom: 2rem; }
+
+    .card-icon {
+      width: 48px; height: 48px;
+      background: linear-gradient(135deg, rgba(0,212,160,0.2), rgba(0,153,255,0.1));
+      border: 1px solid rgba(0,212,160,0.3);
+      border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.4rem;
+      margin-bottom: 1rem;
+    }
+
+    .cadastro-card h1 {
+      font-family: var(--font-h);
+      font-size: 1.7rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 0.35rem;
+    }
+
+    .cadastro-card .sub {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    /* ── Alertas ── */
+    .alert {
+      padding: 0.8rem 1rem;
+      border-radius: 10px;
+      font-size: 0.88rem;
+      margin-bottom: 1.5rem;
+    }
+    .alert a { color: var(--accent); }
+    .alert-error {
+      background: rgba(255,92,122,0.12);
+      border: 1px solid rgba(255,92,122,0.3);
+      color: var(--danger);
+    }
+    .alert-success {
+      background: rgba(0,212,160,0.1);
+      border: 1px solid rgba(0,212,160,0.3);
+      color: var(--success);
+    }
+
+    /* ── Campos ── */
+    .field { margin-bottom: 1.25rem; }
+
+    .field label {
+      display: block;
+      font-size: 0.82rem;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      color: var(--muted);
+      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+    }
+
+    .field input {
+      width: 100%;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      padding: 0.8rem 1rem;
+      color: var(--text);
+      font-family: var(--font-b);
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .field input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(0,212,160,0.15);
+    }
+    .field input::placeholder { color: var(--muted); }
+    .field input.erro-campo {
+      border-color: var(--danger);
+      box-shadow: 0 0 0 3px rgba(255,92,122,0.12);
+    }
+
+    /* Dica de senha */
+    .hint {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-top: 0.35rem;
+    }
+
+    /* Força da senha */
+    .strength-bar {
+      display: flex; gap: 4px; margin-top: 0.5rem;
+    }
+    .strength-bar span {
+      flex: 1; height: 3px; border-radius: 2px;
+      background: var(--border);
+      transition: background 0.3s;
+    }
+    .strength-bar.fraca span:nth-child(1)               { background: var(--danger); }
+    .strength-bar.media span:nth-child(1),
+    .strength-bar.media span:nth-child(2)               { background: #f0a500; }
+    .strength-bar.forte span:nth-child(1),
+    .strength-bar.forte span:nth-child(2),
+    .strength-bar.forte span:nth-child(3)               { background: var(--accent); }
+    .strength-bar.muito-forte span                      { background: var(--accent); }
+
+    /* ── Botão submit ── */
+    .btn-submit {
+      width: 100%;
+      padding: 0.95rem;
+      border-radius: 10px;
+      background: var(--accent);
+      color: var(--bg);
+      font-family: var(--font-h);
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      border: none;
+      cursor: pointer;
+      transition: box-shadow 0.2s, transform 0.15s;
+      margin-top: 0.5rem;
+      box-shadow: 0 0 25px rgba(0,212,160,0.3);
+    }
+    .btn-submit:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 40px rgba(0,212,160,0.45);
+    }
+
+    /* ── Rodapé do card ── */
+    .card-footer {
+      text-align: center;
+      margin-top: 1.75rem;
+      font-size: 0.88rem;
+      color: var(--muted);
+    }
+    .card-footer a {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .card-footer a:hover { text-decoration: underline; }
+
+    /* ── Divisor ── */
+    .divider {
+      display: flex; align-items: center; gap: 1rem;
+      margin: 1.5rem 0;
+      color: var(--muted); font-size: 0.8rem;
+    }
+    .divider::before, .divider::after {
+      content: ''; flex: 1;
+      height: 1px; background: var(--border);
+    }
+
+    /* ── Termos ── */
+    .termos {
+      font-size: 0.78rem;
+      color: var(--muted);
+      text-align: center;
+      margin-top: 1.25rem;
+      line-height: 1.5;
+    }
+    .termos a { color: var(--accent); text-decoration: none; }
+    .termos a:hover { text-decoration: underline; }
+
+    /* ── Responsivo ── */
+    @media (max-width: 480px) {
+      nav { padding: 1rem; }
+      .cadastro-card { padding: 1.75rem 1.25rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav>
+    <a href="index.html" class="logo">SOS <span>Virtual</span></a>
+    <a href="index.html#login" class="btn-nav">Já tenho conta</a>
+  </nav>
+
+  <!-- MAIN -->
+  <main>
+    <div class="cadastro-wrap">
+      <div class="cadastro-card">
+
+        <div class="card-header">
+          <div class="card-icon">🚀</div>
+          <h1>Crie sua conta</h1>
+          <p class="sub">Comece gratuitamente. Sem cartão de crédito.</p>
+        </div>
+
+        <form method="POST" action="cadastro.html" id="form-cadastro" novalidate>
+
+          <div class="field">
+            <label for="nome">Nome completo</label>
+            <input type="text" id="nome" name="nome"
+                   placeholder="Seu nome"
+                   autocomplete="name" required>
+          </div>
+
+          <div class="field">
+            <label for="email">E-mail</label>
+            <input type="email" id="email" name="email"
+                   placeholder="seu@email.com"
+                   autocomplete="email" required>
+          </div>
+
+          <div class="field">
+            <label for="senha">Senha</label>
+            <input type="password" id="senha" name="senha"
+                   placeholder="Mínimo 6 caracteres"
+                   autocomplete="new-password" required>
+            <div class="strength-bar" id="strength-bar">
+              <span></span><span></span><span></span><span></span>
+            </div>
+            <p class="hint" id="strength-text"></p>
+          </div>
+
+          <div class="field">
+            <label for="senha2">Confirmar senha</label>
+            <input type="password" id="senha2" name="senha2"
+                   placeholder="Repita a senha"
+                   autocomplete="new-password" required>
+          </div>
+
+          <div class="field lgpd-field" style="display:flex; align-items:flex-start; gap:0.6rem; margin-bottom:1.25rem;">
+            <input type="checkbox" id="lgpd" name="lgpd" required
+                   style="width:16px; height:16px; margin-top:0.2rem; accent-color: var(--accent); flex-shrink:0;">
+            <label for="lgpd" style="font-size:0.82rem; color:var(--muted); text-transform:none; font-weight:400; letter-spacing:normal;">
+              Autorizo o tratamento dos meus dados pessoais de acordo com a
+              <a href="#" style="color:var(--accent); text-decoration:none;">LGPD</a>
+              e a <a href="#" style="color:var(--accent); text-decoration:none;">Política de Privacidade</a> do SOS Virtual.
+            </label>
+          </div>
+
+          <button type="submit" class="btn-submit">Criar conta grátis →</button>
+
+        </form>
+
+        <p class="termos">
+          Ao criar uma conta, você concorda com nossos
+          <a href="#">Termos de Uso</a> e
+          <a href="#">Política de Privacidade</a>.
+        </p>
+
+        <div class="card-footer">
+          Já tem uma conta? <a href="index.html#login">Entrar agora</a>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // ── Indicador de força da senha ──
+    const senhaInput   = document.getElementById('senha');
+    const strengthBar  = document.getElementById('strength-bar');
+    const strengthText = document.getElementById('strength-text');
+
+    const niveis = [
+      { classe: '',           label: '' },
+      { classe: 'fraca',      label: '🔴 Senha fraca' },
+      { classe: 'media',      label: '🟡 Senha razoável' },
+      { classe: 'forte',      label: '🟢 Senha forte' },
+      { classe: 'muito-forte',label: '✅ Senha muito forte' },
+    ];
+
+    function avaliarSenha(s) {
+      if (!s) return 0;
+      let pts = 0;
+      if (s.length >= 6)  pts++;
+      if (s.length >= 10) pts++;
+      if (/[A-Z]/.test(s) && /[a-z]/.test(s)) pts++;
+      if (/[0-9]/.test(s)) pts++;
+      if (/[^A-Za-z0-9]/.test(s)) pts++;
+      return Math.min(pts, 4);
+    }
+
+    senhaInput.addEventListener('input', () => {
+      const nivel = avaliarSenha(senhaInput.value);
+      strengthBar.className = 'strength-bar ' + (niveis[nivel]?.classe || '');
+      strengthText.textContent = niveis[nivel]?.label || '';
+    });
+
+    // ── Validação de confirmação de senha em tempo real ──
+    const senha2Input = document.getElementById('senha2');
+    senha2Input.addEventListener('input', () => {
+      if (senha2Input.value && senha2Input.value !== senhaInput.value) {
+        senha2Input.classList.add('erro-campo');
+      } else {
+        senha2Input.classList.remove('erro-campo');
+      }
+    });
+  </script>
+
+</body>
+</html>

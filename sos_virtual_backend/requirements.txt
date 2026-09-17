@@ -1,0 +1,9 @@
+flask==3.0.3
+flask-sqlalchemy==3.1.1
+flask-jwt-extended==4.6.0
+flask-cors==4.0.1
+python-dotenv==1.0.1
+werkzeug==3.0.3
+networkx
+pymysql
+python-dateutil
