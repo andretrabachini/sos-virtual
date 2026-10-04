@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="pt-br"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/estilo.css">
+<title>Alertas — SOS Virtual</title></head>
+<body data-pagina="alertas">
+<div class="app"><aside id="menu"></aside>
+<main class="conteudo">
+  <header><h1>Alertas de gastos</h1><p>Defina um limite mensal por categoria e veja quando o gasto passar dele.</p></header>
+  <div id="msg" class="aviso erro" hidden role="alert"></div>
+  <section class="painel"><h2>Novo alerta</h2>
+    <form id="form" class="form-grid">
+      <div class="campo"><label for="categoria">Categoria</label><select id="categoria"></select></div>
+      <div class="campo"><label for="limite">Limite mensal (R$)</label><input type="number" id="limite" step="0.01" min="1" required></div>
+      <div class="campo"><button class="btn" type="submit" style="width:100%">Criar alerta</button></div>
+    </form>
+  </section>
+  <section><div class="cartoes" id="lista"></div></section>
+</main></div>
+<script src="js/app.js"></script>
+<script>
+const CATS=['Alimentação','Transporte','Saúde','Educação','Lazer','Moradia','Vestuário','Investimentos','Outros'];
+categoria.innerHTML=CATS.map(c=>'<option>'+c+'</option>').join('');
+async function carregar(){
+  try{
+    aviso('msg');
+    const a=await api('/alertas');
+    lista.innerHTML=a.length?a.map(x=>{const pct=Math.min(x.gasto_atual/x.limite*100,100);return '<div class="painel"><div class="linha"><h3>'+esc(x.categoria)+'</h3><b class="'+(x.disparado?'neg':'pos')+'">'+(x.disparado?'Limite ultrapassado':'Dentro do limite')+'</b></div>'+
+      '<div class="linha" style="margin-top:.8rem"><span>'+brl(x.gasto_atual)+'</span><span class="rot">limite '+brl(x.limite)+'</span></div><div class="barra'+(x.disparado?' perigo':'')+'"><i style="width:'+pct+'%"></i></div>'+
+      '<div class="acoes-linha"><button class="btn sec peq" data-tog="'+x.id+'" data-ativo="'+x.ativo+'">'+(x.ativo?'Desativar':'Ativar')+'</button><button class="btn perigo peq" data-del="'+x.id+'">Excluir</button></div></div>';}).join(''):'<p class="vazio">Nenhum alerta ainda. Crie um acima para acompanhar uma categoria.</p>';
+  }catch(e){aviso('msg',msgErro(e),'erro');}
+}
+form.addEventListener('submit',async e=>{
+  e.preventDefault();
+  try{await api('/alertas',{method:'POST',body:JSON.stringify({categoria:categoria.value,limite:parseFloat(limite.value)})});form.reset();carregar();}
+  catch(err){aviso('msg',msgErro(err),'erro');}
+});
+lista.addEventListener('click',async e=>{
+  const t=e.target.dataset;
+  try{
+    if(t.tog){await api('/alertas/'+t.tog,{method:'PUT',body:JSON.stringify({ativo:t.ativo!=='true'})});carregar();}
+    else if(t.del&&confirm('Excluir este alerta?')){await api('/alertas/'+t.del,{method:'DELETE'});carregar();}
+  }catch(err){aviso('msg',msgErro(err),'erro');}
+});
+carregar();
+</script></body></html>
