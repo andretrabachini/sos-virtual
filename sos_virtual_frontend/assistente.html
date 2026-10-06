@@ -1,38 +1,120 @@
 <!DOCTYPE html>
-<html lang="pt-br"><head><meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/estilo.css">
-<title>Assistente — SOS Virtual</title></head>
-<body data-pagina="assistente">
-<div class="app"><aside id="menu"></aside>
-<main class="conteudo">
-  <header><h1>Assistente</h1><p>Pergunte sobre seus gastos, peça dicas ou registre uma movimentação escrevendo naturalmente.</p></header>
-  <section class="painel chat">
-    <div class="msgs" id="msgs"><div class="msg ia">Olá! Posso ajudar com seus gastos e metas. Tente: "gastei R$ 50 no mercado hoje".</div></div>
-    <div class="sugestoes" id="sug">
-      <button>Como estão meus gastos este mês?</button><button>Me dê dicas para economizar</button><button>Como montar uma reserva de emergência?</button>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Assistente IA — SOS Virtual</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css">
+  <script src="js/auth.js"></script>
+  <script>Auth.exigirLogin();</script>
+</head>
+<body data-page="assistente">
+<div class="layout">
+  <div id="app-sidebar"></div>
+  <main class="main main--chat">
+    <div class="topbar" style="display:block;margin-bottom:1.5rem;">
+      <h1>Assistente <span>IA</span></h1>
+      <p>Converse sobre suas finanças, registre gastos e receba conselhos personalizados.</p>
     </div>
-    <div class="entrada"><textarea id="texto" rows="1" placeholder="Digite sua mensagem" aria-label="Mensagem"></textarea><button class="btn" id="enviar">Enviar</button></div>
-  </section>
-</main></div>
-<script src="js/app.js"></script>
+
+    <div class="chat-container">
+      <div class="chat-messages" id="chatMessages" aria-live="polite">
+        <div class="boas-vindas" id="boasVindas">
+          <div style="font-size:3rem;margin-bottom:1rem" aria-hidden="true">🤖</div>
+          <h3>Olá, <span data-user-name></span>!</h3>
+          <p>Sou seu assistente financeiro. Pode me perguntar sobre seus gastos,<br>pedir dicas de economia ou registrar uma movimentação.</p>
+          <div class="sugestoes">
+            <button type="button" class="sugestao" onclick="usarSugestao(this)">Como estão meus gastos este mês?</button>
+            <button type="button" class="sugestao" onclick="usarSugestao(this)">Me dê dicas para economizar</button>
+            <button type="button" class="sugestao" onclick="usarSugestao(this)">Gastei R$ 50 no mercado hoje</button>
+            <button type="button" class="sugestao" onclick="usarSugestao(this)">Como montar uma reserva de emergência?</button>
+          </div>
+        </div>
+      </div>
+      <div class="chat-input-area">
+        <label for="chatInput" class="sr-only">Mensagem</label>
+        <textarea class="chat-input" id="chatInput" placeholder="Digite sua mensagem..." rows="1"></textarea>
+        <button class="btn-send" id="btnEnviar" onclick="enviarMensagem()">Enviar</button>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/layout.js"></script>
 <script>
-const historico=[];
-function add(txt,tipo){const d=document.createElement('div');d.className='msg '+tipo;d.textContent=txt;msgs.appendChild(d);msgs.scrollTop=msgs.scrollHeight;return d;}
-async function enviarMsg(){
-  const t=texto.value.trim();if(!t)return;
-  texto.value='';sug.hidden=true;enviar.disabled=true;
-  add(t,'eu');historico.push({role:'user',content:t});
-  const esp=add('Pensando…','ia');
-  try{
-    const d=await api('/chat',{method:'POST',body:JSON.stringify({mensagem:t,historico})});
-    esp.textContent=d.resposta||'Não entendi. Pode repetir de outro jeito?';historico.push({role:'assistant',content:esp.textContent});
-  }catch(e){esp.textContent=msgErro(e);}
-  enviar.disabled=false;texto.focus();
+const BACKEND_URL = 'http://127.0.0.1:5000/api/chat';
+let historico = [];
+
+const input  = document.getElementById('chatInput');
+const msgs   = document.getElementById('chatMessages');
+const btnEnv = document.getElementById('btnEnviar');
+const bvEl   = document.getElementById('boasVindas');
+
+input.addEventListener('input', () => {
+  input.style.height = 'auto';
+  input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+});
+input.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarMensagem(); }
+});
+
+function usarSugestao(el) { input.value = el.textContent; input.focus(); }
+
+function addMsg(texto, tipo) {
+  if (bvEl) bvEl.remove();
+  const div = document.createElement('div');
+  div.className = `msg ${tipo}`;
+  div.innerHTML = `<div class="msg-avatar">${tipo === 'ia' ? 'IA' : 'U'}</div><div class="msg-bubble">${texto.replace(/\n/g, '<br>')}</div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
 }
-enviar.addEventListener('click',enviarMsg);
-texto.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();enviarMsg();}});
-sug.addEventListener('click',e=>{if(e.target.tagName==='BUTTON'){texto.value=e.target.textContent;enviarMsg();}});
-</script></body></html>
+
+function addTyping() {
+  if (bvEl) bvEl.remove();
+  const div = document.createElement('div');
+  div.className = 'msg ia'; div.id = 'typing';
+  div.innerHTML = '<div class="msg-avatar">IA</div><div class="msg-bubble"><div class="typing"><span></span><span></span><span></span></div></div>';
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+async function enviarMensagem() {
+  const texto = input.value.trim();
+  if (!texto) return;
+  input.value = ''; input.style.height = 'auto';
+  btnEnv.disabled = true;
+  addMsg(texto, 'user');
+  historico.push({ role: 'user', content: texto });
+  addTyping();
+  try {
+    const res = await fetch(BACKEND_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Auth.token()}` },
+      body: JSON.stringify({ mensagem: texto, historico })
+    });
+    document.getElementById('typing')?.remove();
+    if (res.ok) {
+      const data = await res.json();
+      const resposta = data.resposta || 'Não entendi, pode repetir?';
+      addMsg(resposta, 'ia');
+      historico.push({ role: 'assistant', content: resposta });
+    } else if (res.status === 401) {
+      addMsg('Sessão expirada. Faça login novamente.', 'ia');
+    } else {
+      const err = await res.json();
+      addMsg('Erro: ' + (err.erro || 'Tente novamente.'), 'ia');
+    }
+  } catch (e) {
+    document.getElementById('typing')?.remove();
+    addMsg('Não consegui conectar ao servidor. Verifique se o backend está rodando em http://127.0.0.1:5000', 'ia');
+  }
+  btnEnv.disabled = false;
+  input.focus();
+}
+</script>
+</body>
+</html>

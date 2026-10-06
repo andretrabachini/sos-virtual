@@ -1,48 +1,71 @@
 <!DOCTYPE html>
-<html lang="pt-br"><head><meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/estilo.css">
-<title>Metas — SOS Virtual</title></head>
-<body data-pagina="metas">
-<div class="app"><aside id="menu"></aside>
-<main class="conteudo">
-  <header><h1>Metas</h1><p>Defina quanto quer juntar e acompanhe o progresso.</p></header>
-  <div id="msg" class="aviso erro" hidden role="alert"></div>
-  <section class="painel"><h2>Nova meta</h2>
-    <form id="form" class="form-grid">
-      <div class="campo larga"><label for="titulo">Nome da meta</label><input id="titulo" placeholder="Ex.: Viagem, reserva de emergência" required></div>
-      <div class="campo"><label for="alvo">Valor alvo (R$)</label><input type="number" id="alvo" step="0.01" min="1" required></div>
-      <div class="campo"><label for="prazo">Prazo (opcional)</label><input type="date" id="prazo"></div>
-      <div class="campo"><button class="btn" type="submit" style="width:100%">Criar meta</button></div>
-    </form>
-  </section>
-  <section><div class="cartoes" id="lista"></div></section>
-</main></div>
-<script src="js/app.js"></script>
-<script>
-async function carregar(){
-  try{
-    aviso('msg');
-    const m=await api('/metas');
-    lista.innerHTML=m.length?m.map(x=>{const ok=x.progresso>=100;return '<div class="painel"><h3>'+esc(x.titulo)+'</h3><div class="rot">'+(x.prazo?'Prazo: '+new Date(x.prazo).toLocaleDateString('pt-BR'):'Sem prazo')+'</div>'+
-      '<div class="linha" style="margin-top:.9rem"><b class="pos">'+brl(x.valor_atual)+'</b><span class="rot">de '+brl(x.valor_alvo)+'</span></div><div class="barra meta"><i style="width:'+Math.min(x.progresso,100)+'%"></i></div>'+
-      '<div class="rot">'+(ok?'Meta atingida':x.progresso+'% concluído')+'</div>'+
-      '<div class="acoes-linha">'+(ok?'':'<input type="number" min="0.01" step="0.01" placeholder="Valor a guardar" aria-label="Valor a guardar" id="dep'+x.id+'"><button class="btn peq" data-dep="'+x.id+'">Guardar</button>')+'<button class="btn perigo peq" data-del="'+x.id+'">Excluir</button></div></div>';}).join(''):'<p class="vazio">Você ainda não tem metas. Crie a primeira acima.</p>';
-  }catch(e){aviso('msg',msgErro(e),'erro');}
-}
-form.addEventListener('submit',async e=>{
-  e.preventDefault();
-  try{await api('/metas',{method:'POST',body:JSON.stringify({titulo:titulo.value.trim(),valor_alvo:parseFloat(alvo.value),prazo:prazo.value||null})});form.reset();carregar();}
-  catch(err){aviso('msg',msgErro(err),'erro');}
-});
-lista.addEventListener('click',async e=>{
-  try{
-    if(e.target.dataset.dep){const v=parseFloat(document.getElementById('dep'+e.target.dataset.dep).value);if(!(v>0))return aviso('msg','Informe um valor maior que zero.','erro');
-      await api('/metas/'+e.target.dataset.dep+'/depositar',{method:'POST',body:JSON.stringify({valor:v})});carregar();}
-    else if(e.target.dataset.del&&confirm('Excluir esta meta?')){await api('/metas/'+e.target.dataset.del,{method:'DELETE'});carregar();}
-  }catch(err){aviso('msg',msgErro(err),'erro');}
-});
-carregar();
-</script></body></html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Metas — SOS Virtual</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css">
+  <script src="js/auth.js"></script>
+  <script>Auth.exigirLogin();</script>
+</head>
+<body data-page="metas">
+<div class="layout">
+  <div id="app-sidebar"></div>
+  <main class="main">
+    <div class="topbar"><h1><span>Metas</span> financeiras</h1></div>
+
+    <div class="section">
+      <div class="section-title">Nova meta</div>
+      <form method="POST">
+        <input type="hidden" name="acao" value="criar">
+        <div class="form-grid">
+          <div class="form-group full"><label for="descricao">Descrição da meta</label>
+            <input type="text" id="descricao" name="descricao" placeholder="Ex: Viagem, Reserva de emergência..." required></div>
+          <div class="form-group"><label for="valor_alvo">Valor alvo (R$)</label>
+            <input type="number" id="valor_alvo" name="valor_alvo" step="0.01" min="1" placeholder="0,00" required></div>
+          <div class="form-group"><label for="prazo">Prazo</label>
+            <input type="date" id="prazo" name="prazo" required></div>
+          <div class="form-group" style="justify-content:flex-end;align-items:flex-end;grid-column:1/-1;">
+            <button type="submit" class="btn btn-primary">Criar meta</button></div>
+        </div>
+      </form>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Suas metas</div>
+      <div class="metas-grid">
+        <div class="meta-card">
+          <div class="meta-header"><div><div class="meta-nome">Viagem para a praia</div><div class="meta-prazo">Prazo: 20/12/2026</div></div></div>
+          <div class="meta-valores"><span class="meta-atual">R$ 900,00</span><span class="meta-alvo">de R$ 3.000,00</span></div>
+          <div class="progress-bar" role="progressbar" aria-valuenow="30" aria-valuemin="0" aria-valuemax="100" aria-label="Progresso da meta"><div class="progress-fill" style="width:30%"></div></div>
+          <div class="meta-pct">30% concluído</div>
+          <div class="meta-actions">
+            <form method="POST" class="depositar-form">
+              <input type="hidden" name="acao" value="depositar"><input type="hidden" name="meta_id" value="1">
+              <label for="dep-1" class="sr-only">Valor a depositar</label>
+              <input type="number" id="dep-1" name="valor_deposito" step="0.01" min="0.01" placeholder="R$ depositar">
+              <button type="submit" class="btn btn-primary btn-sm" aria-label="Depositar">+</button>
+            </form>
+            <a href="#" class="btn btn-danger btn-sm" onclick="return confirm('Deletar esta meta?')">Deletar</a>
+          </div>
+        </div>
+        <div class="meta-card">
+          <div class="meta-header"><div><div class="meta-nome">Reserva de emergência</div><div class="meta-prazo">Prazo: 01/06/2027</div></div>
+            <span style="color:var(--accent);font-size:1.3rem;" aria-label="Meta concluída">✓</span></div>
+          <div class="meta-valores"><span class="meta-atual">R$ 5.000,00</span><span class="meta-alvo">de R$ 5.000,00</span></div>
+          <div class="progress-bar" role="progressbar" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100" aria-label="Progresso da meta"><div class="progress-fill" style="width:100%"></div></div>
+          <div class="meta-pct">100% concluído</div>
+          <div class="meta-actions"><a href="#" class="btn btn-danger btn-sm" onclick="return confirm('Deletar esta meta?')">Deletar</a></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/layout.js"></script>
+</body>
+</html>
