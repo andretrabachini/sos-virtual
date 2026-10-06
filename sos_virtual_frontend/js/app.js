@@ -4,6 +4,9 @@ const API = 'http://127.0.0.1:5000/api';
 const brl = v => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+// protege as páginas logadas: sem token, volta para o login
+if (document.body.dataset.pagina && !localStorage.getItem('sosv_token')) location.replace('login.html');
+
 function usuarioAtual() {
   try { return JSON.parse(localStorage.getItem('sosv_usuario')) || {}; } catch { return {}; }
 }
@@ -19,6 +22,8 @@ async function api(rota, opcoes = {}) {
     }
   });
   const dados = await res.json().catch(() => ({}));
+  // sessão expirada em página logada: limpa o token e volta ao login
+  if (res.status === 401 && document.body.dataset.pagina) { sair(); throw new Error('Sessão expirada.'); }
   if (!res.ok) throw new Error(dados.erro || dados.msg || 'Erro ' + res.status);
   return dados;
 }

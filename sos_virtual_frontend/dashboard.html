@@ -1,58 +1,40 @@
 <!DOCTYPE html>
-<html lang="pt-br">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Painel — SOS Virtual</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css">
-  <script src="js/auth.js"></script>
-  <script>Auth.exigirLogin();</script>
-</head>
-<body data-page="dashboard">
-<div class="layout">
-  <div id="app-sidebar"></div>
-  <main class="main">
-    <div class="topbar"><h1>Olá, <span data-user-name></span> 👋</h1></div>
-
-    <div class="cards-grid">
-      <div class="summary-card green"><div class="card-label">Saldo atual</div><div class="card-value" style="color:var(--accent)">R$ 1.240,00</div><div class="card-meta">Atualizado agora</div></div>
-      <div class="summary-card blue"><div class="card-label">Receitas do mês</div><div class="card-value">R$ 4.500,00</div><div class="card-meta">Setembro 2026</div></div>
-      <div class="summary-card red"><div class="card-label">Despesas do mês</div><div class="card-value">R$ 3.260,00</div><div class="card-meta">Setembro 2026</div></div>
-      <div class="summary-card yellow"><div class="card-label">Metas ativas</div><div class="card-value">2</div><div class="card-meta">Em andamento</div></div>
-    </div>
-
-    <div class="atalhos">
-      <a href="transacoes.html" class="atalho">
-        <div class="atalho-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
-        <div><div class="atalho-label">Transações</div><div class="atalho-desc">Registrar gastos e receitas</div></div>
-      </a>
-      <a href="metas.html" class="atalho">
-        <div class="atalho-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
-        <div><div class="atalho-label">Metas</div><div class="atalho-desc">Acompanhar objetivos</div></div>
-      </a>
-    </div>
-
-    <div class="section">
-      <div class="section-header">
-        <div class="section-title">Últimas transações</div>
-        <a href="transacoes.html" class="link-ver">Ver todas →</a>
-      </div>
-      <table>
-        <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th></tr></thead>
-        <tbody>
-          <tr><td>14/09/2026</td><td>Salário</td><td><span class="categoria-badge">Salário</span></td><td class="valor-positivo">+R$ 4.500,00</td></tr>
-          <tr><td>13/09/2026</td><td>Mercado</td><td><span class="categoria-badge">Alimentação</span></td><td class="valor-negativo">-R$ 320,00</td></tr>
-          <tr><td>10/09/2026</td><td>Uber</td><td><span class="categoria-badge">Transporte</span></td><td class="valor-negativo">-R$ 45,00</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </main>
-</div>
-<script src="js/config.js"></script>
-<script src="js/api.js"></script>
-<script src="js/layout.js"></script>
-</body>
-</html>
+<html lang="pt-br"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/estilo.css">
+<title>Painel — SOS Virtual</title></head>
+<body data-pagina="dashboard">
+<div class="app"><aside id="menu"></aside>
+<main class="conteudo">
+  <header><h1 id="ola">Painel</h1><p id="mes">Resumo do mês</p></header>
+  <div id="msg" class="aviso erro" hidden role="alert"></div>
+  <section class="grid">
+    <div class="painel"><div class="rot">Receitas</div><div class="num pos" id="rec">—</div></div>
+    <div class="painel"><div class="rot">Despesas</div><div class="num neg" id="des">—</div></div>
+    <div class="painel"><div class="rot">Saldo do mês</div><div class="num" id="sal">—</div></div>
+    <div class="painel"><div class="rot">Metas em andamento</div><div class="num" id="met">—</div></div>
+  </section>
+  <div class="duas">
+    <section class="painel"><h2>Gastos por categoria</h2><div id="cats"></div></section>
+    <section class="painel"><h2>Para onde o dinheiro vai</h2><div id="grafo">O mapa de contas e despesas aparecerá aqui quando o módulo de grafos estiver ligado.</div></section>
+  </div>
+  <section class="painel"><div class="filtro"><h2>Últimas transações</h2><a href="transacoes.html">Ver todas</a></div>
+    <table><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th></tr></thead><tbody id="tb"></tbody></table>
+  </section>
+</main></div>
+<script src="js/app.js"></script>
+<script>
+const u=usuarioAtual();ola.textContent='Olá, '+((u.nome||'').split(' ')[0]||'bem-vindo');
+(async()=>{try{
+  const d=await api('/dashboard');
+  const [a,m]=d.mes.split('-');mes.textContent='Resumo de '+new Date(a,m-1).toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+  rec.textContent=brl(d.receita_total);des.textContent=brl(d.despesa_total);
+  sal.textContent=brl(d.saldo);sal.className='num '+(d.saldo<0?'neg':'pos');
+  met.textContent=d.metas.filter(x=>x.progresso<100).length;
+  const c=Object.entries(d.por_categoria).sort((x,y)=>y[1]-x[1]),max=c.length?c[0][1]:1;
+  cats.innerHTML=c.length?c.map(([n,v])=>'<div class="linha"><span>'+esc(n)+'</span><b>'+brl(v)+'</b></div><div class="barra"><i style="width:'+v/max*100+'%"></i></div>').join(''):'<p class="vazio">Nenhum gasto neste mês ainda.</p>';
+  tb.innerHTML=d.transacoes_recentes.length?d.transacoes_recentes.map(t=>'<tr><td>'+new Date(t.data).toLocaleDateString('pt-BR')+'</td><td>'+esc(t.descricao)+'</td><td>'+esc(t.categoria)+'</td><td class="'+(t.valor>0?'pos':'neg')+'">'+(t.valor>0?'+':'−')+brl(Math.abs(t.valor))+'</td></tr>').join(''):'<tr><td colspan="4" class="vazio">Nenhuma transação ainda.</td></tr>';
+}catch(e){aviso('msg',msgErro(e),'erro');}})();
+</script></body></html>

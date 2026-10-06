@@ -1,79 +1,50 @@
 <!DOCTYPE html>
-<html lang="pt-br">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Transações — SOS Virtual</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css">
-  <script src="js/auth.js"></script>
-  <script>Auth.exigirLogin();</script>
-</head>
-<body data-page="transacoes">
-<div class="layout">
-  <div id="app-sidebar"></div>
-  <main class="main">
-    <div class="topbar"><h1><span>Transações</span></h1></div>
-
-    <div class="cards-grid">
-      <div class="summary-card green"><div class="card-label">Receitas do mês</div><div class="card-value">R$ 4.500,00</div></div>
-      <div class="summary-card red"><div class="card-label">Despesas do mês</div><div class="card-value">R$ 3.260,00</div></div>
-      <div class="summary-card blue"><div class="card-label">Saldo do mês</div><div class="card-value" style="color:var(--accent)">R$ 1.240,00</div></div>
-    </div>
-
-    <div class="section">
-      <div class="section-title">Nova transação</div>
-      <form method="POST">
-        <input type="hidden" name="acao" value="adicionar">
-        <div class="form-grid">
-          <div class="form-group full"><label for="descricao">Descrição</label>
-            <input type="text" id="descricao" name="descricao" placeholder="Ex: Mercado, Salário, Netflix..." required></div>
-          <div class="form-group"><label for="valor">Valor (R$)</label>
-            <input type="number" id="valor" name="valor" step="0.01" min="0.01" placeholder="0,00" required></div>
-          <div class="form-group"><label for="tipo">Tipo</label>
-            <select id="tipo" name="tipo"><option value="despesa">Despesa</option><option value="receita">Receita</option></select></div>
-          <div class="form-group"><label for="categoria">Categoria</label>
-            <select id="categoria" name="categoria">
-              <option value="Alimentação">Alimentação</option><option value="Transporte">Transporte</option>
-              <option value="Saúde">Saúde</option><option value="Educação">Educação</option>
-              <option value="Lazer">Lazer</option><option value="Moradia">Moradia</option>
-              <option value="Salário">Salário</option><option value="Outros">Outros</option>
-            </select></div>
-          <div class="form-group"><label for="data">Data</label>
-            <input type="date" id="data" name="data" value="2026-09-15" required></div>
-          <div class="form-group" style="justify-content:flex-end;align-items:flex-end;">
-            <button type="submit" class="btn btn-primary">Registrar</button></div>
-        </div>
-      </form>
-    </div>
-
-    <div class="section">
-      <div class="filtro-row">
-        <div class="section-title" style="margin-bottom:0">Histórico</div>
-        <form method="GET" style="display:flex;align-items:center;gap:.5rem;margin-left:auto;">
-          <label for="mes" class="sr-only">Mês</label>
-          <input type="month" id="mes" name="mes" value="2026-09">
-          <button type="submit" class="btn btn-primary" style="padding:.5rem 1rem;">Filtrar</button>
-        </form>
-      </div>
-      <table>
-        <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th><th></th></tr></thead>
-        <tbody>
-          <tr><td>14/09/2026</td><td>Salário</td><td><span class="categoria-badge">Salário</span></td><td class="valor-positivo">+R$ 4.500,00</td>
-            <td><a href="#" class="btn btn-danger btn-sm" onclick="return confirm('Deletar esta transação?')">Deletar</a></td></tr>
-          <tr><td>13/09/2026</td><td>Mercado</td><td><span class="categoria-badge">Alimentação</span></td><td class="valor-negativo">-R$ 320,00</td>
-            <td><a href="#" class="btn btn-danger btn-sm" onclick="return confirm('Deletar esta transação?')">Deletar</a></td></tr>
-          <tr><td>10/09/2026</td><td>Uber</td><td><span class="categoria-badge">Transporte</span></td><td class="valor-negativo">-R$ 45,00</td>
-            <td><a href="#" class="btn btn-danger btn-sm" onclick="return confirm('Deletar esta transação?')">Deletar</a></td></tr>
-        </tbody>
-      </table>
-    </div>
-  </main>
-</div>
-<script src="js/config.js"></script>
-<script src="js/api.js"></script>
-<script src="js/layout.js"></script>
-</body>
-</html>
+<html lang="pt-br"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/estilo.css">
+<title>Transações — SOS Virtual</title></head>
+<body data-pagina="transacoes">
+<div class="app"><aside id="menu"></aside>
+<main class="conteudo">
+  <header><h1>Transações</h1><p>Registre receitas e despesas e consulte o histórico por mês.</p></header>
+  <div id="msg" class="aviso erro" hidden role="alert"></div>
+  <section class="grid">
+    <div class="painel"><div class="rot">Receitas</div><div class="num pos" id="rec">—</div></div>
+    <div class="painel"><div class="rot">Despesas</div><div class="num neg" id="des">—</div></div>
+    <div class="painel"><div class="rot">Saldo</div><div class="num" id="sal">—</div></div>
+  </section>
+  <section class="painel"><h2>Nova transação</h2>
+    <form id="form" class="form-grid">
+      <div class="campo larga"><label for="descricao">Descrição</label><input id="descricao" placeholder="Ex.: mercado, salário, Netflix" required></div>
+      <div class="campo"><label for="valor">Valor (R$)</label><input type="number" id="valor" step="0.01" min="0.01" required></div>
+      <div class="campo"><label for="tipo">Tipo</label><select id="tipo"><option value="despesa">Despesa</option><option value="receita">Receita</option></select></div>
+      <div class="campo"><label for="categoria">Categoria</label><select id="categoria"></select></div>
+      <div class="campo"><button class="btn" type="submit" style="width:100%">Registrar</button></div>
+    </form>
+  </section>
+  <section class="painel"><div class="filtro"><h2>Histórico</h2><label class="rot">Mês <input type="month" id="mesf"></label></div>
+    <table><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th><th></th></tr></thead><tbody id="tb"></tbody></table>
+  </section>
+</main></div>
+<script src="js/app.js"></script>
+<script>
+const CATS=['Alimentação','Transporte','Saúde','Educação','Lazer','Moradia','Vestuário','Investimentos','Salário','Outros'];
+categoria.innerHTML='<option value="">Detectar automaticamente</option>'+CATS.map(c=>'<option>'+c+'</option>').join('');
+const hoje=new Date();mesf.value=hoje.getFullYear()+'-'+String(hoje.getMonth()+1).padStart(2,'0');
+async function carregar(){try{
+  aviso('msg');
+  const l=await api('/transacoes?mes='+mesf.value);
+  const r=l.filter(t=>t.valor>0).reduce((s,t)=>s+t.valor,0),d=l.filter(t=>t.valor<0).reduce((s,t)=>s-t.valor,0);
+  rec.textContent=brl(r);des.textContent=brl(d);sal.textContent=brl(r-d);sal.className='num '+(r-d<0?'neg':'pos');
+  tb.innerHTML=l.length?l.map(t=>'<tr><td>'+new Date(t.data).toLocaleDateString('pt-BR')+'</td><td>'+esc(t.descricao)+'</td><td>'+esc(t.categoria)+'</td><td class="'+(t.valor>0?'pos':'neg')+'">'+(t.valor>0?'+':'−')+brl(Math.abs(t.valor))+'</td><td><button class="btn perigo peq" data-del="'+t.id+'">Excluir</button></td></tr>').join(''):'<tr><td colspan="5" class="vazio">Nenhuma transação neste mês.</td></tr>';
+}catch(e){aviso('msg',msgErro(e),'erro');}}
+form.addEventListener('submit',async e=>{e.preventDefault();
+  const v=parseFloat(valor.value);
+  try{await api('/transacoes',{method:'POST',body:JSON.stringify({descricao:descricao.value.trim(),valor:tipo.value==='despesa'?-v:v,categoria:categoria.value||undefined})});form.reset();carregar();}
+  catch(err){aviso('msg',msgErro(err),'erro');}});
+tb.addEventListener('click',async e=>{const id=e.target.dataset.del;
+  if(id&&confirm('Excluir esta transação?'))try{await api('/transacoes/'+id,{method:'DELETE'});carregar();}catch(err){aviso('msg',msgErro(err),'erro');}});
+mesf.addEventListener('change',carregar);carregar();
+</script></body></html>
