@@ -3,8 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Entre na sua conta do SOS Virtual.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230E2A47'/%3E%3Ctext x='16' y='22' font-size='18' font-family='sans-serif' font-weight='700' text-anchor='middle' fill='%23fff'%3ES%3C/text%3E%3C/svg%3E">
 <title>Entrar — SOS Virtual</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/estilo.css">
 <style>
@@ -34,8 +37,12 @@ body{display:grid;place-items:center;min-height:100vh;padding:1.5rem}
 
 <script src="js/app.js"></script>
 <script>
+// quem já está logado vai direto ao painel (sessão vencida é limpa pelo app.js no primeiro 401)
+if (localStorage.getItem('sosv_token')) location.replace('dashboard.html');
+const btn = document.querySelector('#form button[type=submit]');
 document.getElementById('form').addEventListener('submit', async e => {
   e.preventDefault();
+  btn.disabled = true; btn.textContent = 'Entrando...';
   const msg = document.getElementById('msg');
   msg.hidden = true;
   try {
@@ -51,6 +58,7 @@ document.getElementById('form').addEventListener('submit', async e => {
       ? 'Não consegui falar com o servidor. Confira se o backend está rodando em http://127.0.0.1:5000.'
       : err.message;
     msg.hidden = false;
+    btn.disabled = false; btn.textContent = 'Entrar';
   }
 });
 </script>

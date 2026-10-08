@@ -1,7 +1,10 @@
 <!DOCTYPE html>
 <html lang="pt-br"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Crie sua conta gratuita no SOS Virtual.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230E2A47'/%3E%3Ctext x='16' y='22' font-size='18' font-family='sans-serif' font-weight='700' text-anchor='middle' fill='%23fff'%3ES%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/estilo.css">
 <title>Criar conta — SOS Virtual</title>
@@ -17,13 +20,15 @@
     <div class="campo"><label for="renda">Renda mensal (opcional)</label><input type="number" id="renda" min="0" step="0.01" placeholder="0,00"></div>
     <div class="campo"><label for="senha">Senha</label><input type="password" id="senha" autocomplete="new-password" placeholder="Mínimo 6 caracteres" required><div class="forca"><i id="forca"></i></div></div>
     <div class="campo"><label for="senha2">Confirmar senha</label><input type="password" id="senha2" autocomplete="new-password" required></div>
-    <label class="lgpd"><input type="checkbox" id="lgpd"><span>Autorizo o tratamento dos meus dados pessoais conforme a LGPD e a Política de Privacidade do SOS Virtual.</span></label>
+    <label class="lgpd"><input type="checkbox" id="lgpd"><span>Autorizo o tratamento dos meus dados pessoais conforme a LGPD e a <a href="privacidade.html" target="_blank" rel="noopener">Política de Privacidade</a> do SOS Virtual.</span></label>
     <button class="btn" type="submit">Criar conta</button>
     <p class="troca">Já tem conta? <a href="login.html">Entrar</a></p>
   </form>
 </div>
 <script src="js/app.js"></script>
 <script>
+if(localStorage.getItem('sosv_token'))location.replace('dashboard.html');
+const btn=document.querySelector('#form button[type=submit]');
 senha.addEventListener('input',()=>{const s=senha.value;let p=0;if(s.length>=6)p++;if(s.length>=10)p++;if(/[A-Z]/.test(s)&&/[a-z]/.test(s))p++;if(/\d/.test(s)&&/[^A-Za-z0-9]/.test(s))p++;
   forca.style.width=p*25+'%';forca.style.background=p<2?'var(--neg)':p<3?'var(--gold)':'var(--pos)';});
 form.addEventListener('submit',async e=>{
@@ -32,10 +37,11 @@ form.addEventListener('submit',async e=>{
   if(senha.value.length<6)return aviso('msg','A senha precisa ter pelo menos 6 caracteres.','erro');
   if(senha.value!==senha2.value)return aviso('msg','As senhas não são iguais.','erro');
   if(!lgpd.checked)return aviso('msg','Para criar a conta, aceite o tratamento de dados (LGPD).','erro');
+  btn.disabled=true;btn.textContent='Criando conta...';
   try{
-    const d=await api('/auth/cadastro',{method:'POST',body:JSON.stringify({nome:nome.value.trim(),email:email.value.trim(),senha:senha.value,renda_mensal:parseFloat(renda.value)||0})});
+    const d=await api('/auth/cadastro',{method:'POST',body:JSON.stringify({nome:nome.value.trim(),email:email.value.trim(),senha:senha.value,renda_mensal:parseFloat(renda.value)||0,lgpd_aceito:true})});
     localStorage.setItem('sosv_token',d.token);localStorage.setItem('sosv_usuario',JSON.stringify(d.usuario));
     location.href='dashboard.html';
-  }catch(err){aviso('msg',msgErro(err),'erro');}
+  }catch(err){aviso('msg',msgErro(err),'erro');btn.disabled=false;btn.textContent='Criar conta';}
 });
 </script></body></html>
