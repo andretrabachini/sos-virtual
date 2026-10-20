@@ -1,8 +1,10 @@
 from flask import Blueprint, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import jwt_required
+from datetime import datetime
+
+from extensoes import usuario_id_atual
 from modelos.modelos import Meta, Transacao
 from servicos.financeiro import resumo_mensal, gastos_por_categoria
-from datetime import datetime
 
 dashboard_bp = Blueprint("dashboard", __name__, url_prefix="/api/dashboard")
 
@@ -10,7 +12,7 @@ dashboard_bp = Blueprint("dashboard", __name__, url_prefix="/api/dashboard")
 @dashboard_bp.route("", methods=["GET"])
 @jwt_required()
 def dados_dashboard():
-    usuario_id = get_jwt_identity()
+    usuario_id = usuario_id_atual()
 
     # pega o resumo financeiro do mes atual
     resumo = resumo_mensal(usuario_id)
