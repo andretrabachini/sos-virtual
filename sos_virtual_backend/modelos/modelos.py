@@ -16,9 +16,14 @@ class Usuario(db.Model):
 
     criado_em = db.Column(db.DateTime, default=datetime.utcnow)
 
-    # relacionamentos: um usuario tem varias transacoes e metas
-    transacoes = db.relationship("Transacao", backref="usuario", lazy=True)
-    metas = db.relationship("Meta", backref="usuario", lazy=True)
+    # data e hora em que o usuario aceitou o tratamento de dados (prova do consentimento LGPD)
+    lgpd_aceito_em = db.Column(db.DateTime, nullable=True)
+
+    # relacionamentos: um usuario tem varias transacoes, metas e alertas
+    # cascade garante que, ao excluir a conta, todos os dados dela somem junto (direito de eliminacao da LGPD)
+    transacoes = db.relationship("Transacao", backref="usuario", lazy=True, cascade="all, delete-orphan")
+    metas = db.relationship("Meta", backref="usuario", lazy=True, cascade="all, delete-orphan")
+    alertas = db.relationship("Alerta", backref="usuario", lazy=True, cascade="all, delete-orphan")
 
     def para_dict(self):
         return {

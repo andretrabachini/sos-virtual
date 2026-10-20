@@ -1,9 +1,11 @@
 flask==3.0.3
 flask-sqlalchemy==3.1.1
-flask-jwt-extended==4.6.0
+flask-jwt-extended==4.7.1
 flask-cors==4.0.1
+flask-limiter==3.8.0
 python-dotenv==1.0.1
 werkzeug==3.0.3
-networkx
-pymysql
-python-dateutil
+pymysql==1.1.1
+cryptography
+networkx==3.3
+python-dateutil==2.9.0.post0
