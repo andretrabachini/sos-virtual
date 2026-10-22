@@ -3,22 +3,23 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Entre na sua conta do SOS Virtual.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230E2A47'/%3E%3Ctext x='16' y='22' font-size='18' font-family='sans-serif' font-weight='700' text-anchor='middle' fill='%23fff'%3ES%3C/text%3E%3C/svg%3E">
-<title>Entrar — SOS Virtual</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/estilo.css">
+<meta name="description" content="Entre na sua conta do SOS Virtual.">
+<title>Entrar — SOS Virtual</title>
 <style>
 body{display:grid;place-items:center;min-height:100vh;padding:1.5rem}
 .caixa{width:100%;max-width:420px}
 .caixa .logo{display:block;color:var(--brand);margin:0 0 1.5rem}.caixa .logo i{color:var(--brand2)}
-.caixa form{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:2rem}
+.caixa form,.caixa .cartao{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:2rem}
 .caixa h1{font-size:1.7rem;margin-bottom:.3rem}
 .caixa p.sub{color:var(--ink2);margin-bottom:1.5rem}
 .caixa .btn{width:100%}
 .caixa .troca{text-align:center;margin-top:1.1rem;color:var(--ink2);font-size:.92rem}
+.esqueci{display:inline-block;margin-top:.45rem;font-size:.88rem}
 </style>
 </head>
 <body>
@@ -29,16 +30,19 @@ body{display:grid;place-items:center;min-height:100vh;padding:1.5rem}
     <p class="sub">Use o e-mail e a senha do seu cadastro.</p>
     <div id="msg" class="aviso erro" hidden role="alert"></div>
     <div class="campo"><label for="email">E-mail</label><input type="email" id="email" autocomplete="email" required></div>
-    <div class="campo"><label for="senha">Senha</label><input type="password" id="senha" autocomplete="current-password" required></div>
+    <div class="campo"><label for="senha">Senha</label><input type="password" id="senha" autocomplete="current-password" required><a class="esqueci" href="recuperar.html">Esqueci minha senha</a></div>
     <button class="btn" type="submit">Entrar</button>
     <p class="troca">Ainda não tem conta? <a href="cadastro.html">Criar conta</a></p>
   </form>
 </div>
 
 <script src="js/app.js"></script>
+<script src="js/senha-visivel.js"></script>
 <script>
 // quem já está logado vai direto ao painel (sessão vencida é limpa pelo app.js no primeiro 401)
 if (localStorage.getItem('sosv_token')) location.replace('dashboard.html');
+// vindo da redefinição de senha: avisa que deu certo
+if (new URLSearchParams(location.search).get('senha') === 'alterada') aviso('msg', 'Senha alterada com sucesso. Entre com a nova senha.');
 const btn = document.querySelector('#form button[type=submit]');
 document.getElementById('form').addEventListener('submit', async e => {
   e.preventDefault();
@@ -54,6 +58,7 @@ document.getElementById('form').addEventListener('submit', async e => {
     localStorage.setItem('sosv_usuario', JSON.stringify(d.usuario));
     location.href = 'dashboard.html';
   } catch (err) {
+    msg.className = 'aviso erro';
     msg.textContent = err instanceof TypeError
       ? 'Não consegui falar com o servidor. Confira se o backend está rodando em http://127.0.0.1:5000.'
       : err.message;

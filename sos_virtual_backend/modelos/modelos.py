@@ -26,6 +26,7 @@ class Usuario(db.Model):
     alertas = db.relationship("Alerta", backref="usuario", lazy=True, cascade="all, delete-orphan")
     arestas = db.relationship("Aresta", backref="usuario", lazy=True, cascade="all, delete-orphan")
     nos = db.relationship("No", backref="usuario", lazy=True, cascade="all, delete-orphan")
+    redefinicoes = db.relationship("RedefinicaoSenha", backref="usuario", lazy=True, cascade="all, delete-orphan")
 
     def para_dict(self):
         return {
@@ -187,3 +188,19 @@ class Aresta(db.Model):
             "parcela_atual": self.parcela_atual,
             "total_parcelas": self.total_parcelas
         }
+
+
+# tabela de redefinicoes de senha — um registro por pedido de "esqueci minha senha"
+# guardamos so o HASH do token (o token em si vai apenas no link do e-mail): se o banco vazar,
+# ninguem consegue usar os pedidos pendentes
+class RedefinicaoSenha(db.Model):
+    __tablename__ = "redefinicoes_senha"
+
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=False, index=True)
+    token_hash = db.Column(db.String(64), unique=True, nullable=False)
+    criado_em = db.Column(db.DateTime, default=datetime.utcnow)
+    expira_em = db.Column(db.DateTime, nullable=False)
+
+    # preenchido quando o link e usado (ou quando um pedido mais novo o substitui): uso unico
+    usado_em = db.Column(db.DateTime, nullable=True)
