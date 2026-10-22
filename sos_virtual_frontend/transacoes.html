@@ -7,7 +7,14 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/estilo.css">
-<title>Transações — SOS Virtual</title></head>
+<title>Transações — SOS Virtual</title>
+<style>
+.opcoes{grid-column:1/-1;display:grid;gap:.5rem;margin-bottom:1rem}
+.opcoes label{display:flex;gap:.6rem;align-items:flex-start;font-size:.9rem;color:var(--ink2);font-weight:400}
+.opcoes input{margin-top:.25rem;accent-color:var(--brand)}
+.campo input[type=file]{padding:.5rem}
+#resimp ul{margin:.4rem 0 .4rem 1.2rem}
+</style></head>
 <body data-pagina="transacoes">
 <div class="app"><aside id="menu"></aside>
 <main class="conteudo">
@@ -26,6 +33,20 @@
       <div class="campo"><label for="categoria">Categoria</label><select id="categoria"></select></div>
       <div class="campo"><button class="btn" type="submit" style="width:100%">Registrar</button></div>
     </form>
+  </section>
+  <section class="painel"><h2>Importar extrato</h2>
+    <p class="rot" style="margin-bottom:1rem">Envie o extrato do banco ou a fatura do cartão em CSV ou OFX (até 2 MB). Compras parceladas, como "PARC 02/05", são reconhecidas e as parcelas futuras aparecem na projeção do painel. O arquivo é lido na hora e não fica guardado: só os lançamentos entram no sistema.</p>
+    <form id="formimp" class="form-grid">
+      <div class="campo larga"><label for="arquivo">Arquivo do extrato (CSV ou OFX)</label><input type="file" id="arquivo" accept=".csv,.ofx,.qfx" required></div>
+      <div class="campo larga"><label for="conta">Conta ou cartão</label><input id="conta" value="Conta Principal" maxlength="100"></div>
+      <div class="opcoes">
+        <label><input type="checkbox" id="cartao"><span>É fatura de cartão (as compras aparecem como valores positivos)</span></label>
+        <label><input type="checkbox" id="vtotal"><span>Nas compras parceladas, o valor do arquivo é o total da compra (por padrão, é o valor de uma parcela)</span></label>
+        <label><input type="checkbox" id="detparc" checked><span>Detectar compras parceladas e projetar as parcelas futuras</span></label>
+      </div>
+      <div class="campo"><button class="btn" id="btnimp" type="submit" style="width:100%">Importar extrato</button></div>
+    </form>
+    <div id="resimp" class="aviso" hidden role="status" style="margin:1rem 0 0"></div>
   </section>
   <section class="painel"><div class="filtro"><h2>Histórico</h2><label class="rot">Mês <input type="month" id="mesf"></label></div>
     <table><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th><th></th></tr></thead><tbody id="tb"></tbody></table>
@@ -50,4 +71,33 @@ form.addEventListener('submit',async e=>{e.preventDefault();
 tb.addEventListener('click',async e=>{const id=e.target.dataset.del;
   if(id&&confirm('Excluir esta transação?'))try{await api('/transacoes/'+id,{method:'DELETE'});carregar();}catch(err){aviso('msg',msgErro(err),'erro');}});
 mesf.addEventListener('change',carregar);carregar();
+
+// ---------- importação de extrato ----------
+function resumoImp(r){
+  let h='<b>'+r.importadas+' lançamento(s) importado(s)</b>'
+    +(r.duplicadas?', '+r.duplicadas+' já existia(m) e foi(ram) ignorado(s)':'')
+    +(r.linhas_com_erro?', '+r.linhas_com_erro+' linha(s) com problema':'')+'.';
+  if(r.parceladas&&r.parceladas.length)h+='<p style="margin-top:.6rem">Compras parceladas reconhecidas (confira se estão corretas):</p><ul>'
+    +r.parceladas.map(p=>'<li>'+esc(p.descricao)+' — parcela '+esc(p.parcela)+' de '+brl(p.valor_parcela)+' ('+p.projecoes_criadas+' parcela(s) futura(s) projetada(s))</li>').join('')+'</ul>';
+  if(r.erros&&r.erros.length)h+='<p class="rot" style="margin-top:.6rem">Linhas ignoradas: '
+    +r.erros.map(x=>'linha '+x.linha+' ('+esc(x.motivo)+')').join(', ')+(r.linhas_com_erro>r.erros.length?' e outras.':'.')+'</p>';
+  h+='<p class="rot" style="margin-top:.6rem">Os lançamentos aparecem no histórico do mês em que foram feitos: use o filtro de mês para ver os de outros meses.</p>';
+  resimp.innerHTML=h;resimp.hidden=false;
+}
+formimp.addEventListener('submit',async e=>{e.preventDefault();
+  aviso('msg');resimp.hidden=true;
+  const f=arquivo.files[0];
+  if(!f)return aviso('msg','Escolha um arquivo CSV ou OFX.','erro');
+  if(!/\.(csv|ofx|qfx)$/i.test(f.name))return aviso('msg','Formato não suportado. Envie um arquivo CSV ou OFX.','erro');
+  if(f.size>2*1024*1024)return aviso('msg','O arquivo passa de 2 MB.','erro');
+  const fd=new FormData();
+  fd.append('arquivo',f);fd.append('conta',conta.value.trim()||'Conta Principal');
+  if(cartao.checked)fd.append('cartao','true');
+  if(vtotal.checked)fd.append('valor_total','true');
+  if(!detparc.checked)fd.append('parcelas','false');
+  btnimp.disabled=true;btnimp.textContent='Importando…';
+  try{const r=await api('/simulacoes/importar-extrato',{method:'POST',body:fd});resumoImp(r);formimp.reset();carregar();}
+  catch(err){aviso('msg',msgErro(err),'erro');}
+  btnimp.disabled=false;btnimp.textContent='Importar extrato';
+});
 </script></body></html>

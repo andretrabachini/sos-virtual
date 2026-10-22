@@ -13,14 +13,15 @@ function usuarioAtual() {
 
 // fetch com token; lança erro com mensagem amigável quando a API falha
 async function api(rota, opcoes = {}) {
-  const res = await fetch(API + rota, {
-    ...opcoes,
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + (localStorage.getItem('sosv_token') || ''),
-      ...(opcoes.headers || {})
-    }
-  });
+  const headers = {
+    'Authorization': 'Bearer ' + (localStorage.getItem('sosv_token') || ''),
+    ...(opcoes.headers || {})
+  };
+  // upload de arquivo (FormData): o navegador define o Content-Type sozinho, com o boundary.
+  // nos demais casos o corpo é JSON
+  if (!(opcoes.body instanceof FormData)) headers['Content-Type'] = headers['Content-Type'] || 'application/json';
+
+  const res = await fetch(API + rota, { ...opcoes, headers });
   const dados = await res.json().catch(() => ({}));
   // sessão expirada em página logada: limpa o token e volta ao login
   if (res.status === 401 && document.body.dataset.pagina) { sair(); throw new Error('Sessão expirada.'); }

@@ -23,6 +23,7 @@
     <section class="painel"><h2>Gastos por categoria</h2><div id="cats"></div></section>
     <section class="painel"><h2>Para onde o dinheiro vai</h2><div id="grafo">O mapa de contas e despesas aparecerá aqui quando o módulo de grafos estiver ligado.</div></section>
   </div>
+  <section class="painel"><h2>Parcelas dos próximos meses</h2><div id="proj"><p class="vazio">Carregando…</p></div></section>
   <section class="painel"><div class="filtro"><h2>Últimas transações</h2><a href="transacoes.html">Ver todas</a></div>
     <table><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th></tr></thead><tbody id="tb"></tbody></table>
   </section>
@@ -40,4 +41,18 @@ const u=usuarioAtual();ola.textContent='Olá, '+((u.nome||'').split(' ')[0]||'be
   cats.innerHTML=c.length?c.map(([n,v])=>'<div class="linha"><span>'+esc(n)+'</span><b>'+brl(v)+'</b></div><div class="barra"><i style="width:'+v/max*100+'%"></i></div>').join(''):'<p class="vazio">Nenhum gasto neste mês ainda.</p>';
   tb.innerHTML=d.transacoes_recentes.length?d.transacoes_recentes.map(t=>'<tr><td>'+new Date(t.data).toLocaleDateString('pt-BR')+'</td><td>'+esc(t.descricao)+'</td><td>'+esc(t.categoria)+'</td><td class="'+(t.valor>0?'pos':'neg')+'">'+(t.valor>0?'+':'−')+brl(Math.abs(t.valor))+'</td></tr>').join(''):'<tr><td colspan="4" class="vazio">Nenhuma transação ainda.</td></tr>';
 }catch(e){aviso('msg',msgErro(e),'erro');}})();
+
+// projeção das parcelas futuras (vem das arestas criadas na importação de extratos)
+(async()=>{try{
+  const p=await api('/simulacoes/projecao?meses=6');
+  const total=p.meses.reduce((s,x)=>s+x.comprometido,0);
+  if(!total){proj.innerHTML='<p class="vazio">Nenhuma parcela futura registrada. Importe um extrato com compras parceladas em Transações.</p>';return;}
+  const renda=p.renda_mensal,maior=Math.max(...p.meses.map(x=>x.comprometido));
+  proj.innerHTML=p.meses.map(x=>{
+    const [ano,mm]=x.mes.split('-'),nome=new Date(ano,mm-1).toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+    const pct=renda?Math.min(x.comprometido/renda*100,100):x.comprometido/maior*100;
+    const neg=x.saldo_livre!==null&&x.saldo_livre<0;
+    return '<div class="linha"><span>'+nome+'</span><span><b>'+brl(x.comprometido)+'</b>'+(x.saldo_livre!==null?' <span class="rot">· '+(neg?'faltam '+brl(-x.saldo_livre):'sobra '+brl(x.saldo_livre))+'</span>':'')+'</span></div><div class="barra'+(neg?' perigo':'')+'"><i style="width:'+pct+'%"></i></div>';
+  }).join('')+(renda?'<p class="rot">A barra mostra quanto da sua renda mensal já está comprometido por parcelas.</p>':'<p class="rot">Informe sua renda mensal no cadastro para ver quanto sobra livre em cada mês.</p>');
+}catch(e){proj.innerHTML='<p class="vazio">'+esc(msgErro(e))+'</p>';}})();
 </script></body></html>
