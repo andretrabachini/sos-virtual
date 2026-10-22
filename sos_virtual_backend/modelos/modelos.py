@@ -24,6 +24,8 @@ class Usuario(db.Model):
     transacoes = db.relationship("Transacao", backref="usuario", lazy=True, cascade="all, delete-orphan")
     metas = db.relationship("Meta", backref="usuario", lazy=True, cascade="all, delete-orphan")
     alertas = db.relationship("Alerta", backref="usuario", lazy=True, cascade="all, delete-orphan")
+    arestas = db.relationship("Aresta", backref="usuario", lazy=True, cascade="all, delete-orphan")
+    nos = db.relationship("No", backref="usuario", lazy=True, cascade="all, delete-orphan")
 
     def para_dict(self):
         return {
@@ -113,4 +115,75 @@ class Alerta(db.Model):
             "categoria": self.categoria,
             "limite": self.limite,
             "ativo": self.ativo
+        }
+
+
+# tabela de nos — os vertices do grafo financeiro (contas, cartoes, categorias, metas, rendas)
+class No(db.Model):
+    __tablename__ = "nos"
+    # o mesmo usuario nao pode ter dois nos com o mesmo nome e tipo
+    __table_args__ = (
+        db.UniqueConstraint("usuario_id", "nome", "tipo", name="uq_no_usuario_nome_tipo"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=False)
+    nome = db.Column(db.String(100), nullable=False)
+
+    # tipo do no: 'conta', 'categoria', 'meta' ou 'renda'
+    tipo = db.Column(db.String(50), nullable=False)
+
+    # so para contas/cartoes (usados pelo servico de grafos):
+    # capacidade = quanto a conta consegue pagar no mes (limite do cartao, saldo disponivel)
+    capacidade = db.Column(db.Numeric(12, 2, asdecimal=False), nullable=True)
+    # custo = percentual por R$ movimentado: negativo = cashback/beneficio, positivo = juros/taxa
+    custo = db.Column(db.Float, default=0.0)
+
+    def para_dict(self):
+        return {
+            "id": self.id,
+            "nome": self.nome,
+            "tipo": self.tipo,
+            "capacidade": self.capacidade,
+            "custo": self.custo
+        }
+
+
+# tabela de arestas — as ligacoes direcionadas do grafo: de onde o dinheiro sai e para onde vai
+# aqui ficam principalmente as parcelas FUTURAS de compras parceladas (projetada=True),
+# que mostram quanto da renda dos proximos meses ja esta comprometido
+class Aresta(db.Model):
+    __tablename__ = "arestas"
+
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=False)
+    origem_id = db.Column(db.Integer, db.ForeignKey("nos.id"), nullable=False)
+    destino_id = db.Column(db.Integer, db.ForeignKey("nos.id"), nullable=False)
+
+    # valor em R$ (sempre positivo; a direcao ja diz quem paga e quem recebe)
+    peso = db.Column(db.Numeric(12, 2, asdecimal=False), nullable=False)
+    data = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    descricao = db.Column(db.String(255))
+
+    # True = parcela futura ainda nao paga (projecao); False = movimento real
+    projetada = db.Column(db.Boolean, default=False, nullable=False)
+    parcela_atual = db.Column(db.Integer, nullable=True)
+    total_parcelas = db.Column(db.Integer, nullable=True)
+
+    # grupo_parcelamento: todas as parcelas criadas juntas; chave_compra: identifica a mesma
+    # compra em extratos de meses diferentes (evita contar a mesma parcela duas vezes)
+    grupo_parcelamento = db.Column(db.String(32), nullable=True)
+    chave_compra = db.Column(db.String(220), nullable=True, index=True)
+
+    def para_dict(self):
+        return {
+            "id": self.id,
+            "origem_id": self.origem_id,
+            "destino_id": self.destino_id,
+            "peso": self.peso,
+            "data": self.data.isoformat() if self.data else None,
+            "descricao": self.descricao,
+            "projetada": self.projetada,
+            "parcela_atual": self.parcela_atual,
+            "total_parcelas": self.total_parcelas
         }

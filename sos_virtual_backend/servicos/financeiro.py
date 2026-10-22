@@ -1,6 +1,8 @@
 from modelos.modelos import Transacao
 from datetime import datetime
 
+from dateutil.relativedelta import relativedelta
+
 
 # categorias disponiveis no sistema
 CATEGORIAS = [
@@ -41,17 +43,27 @@ def detectar_categoria(texto: str) -> str:
     return "Outros"
 
 
+def _limites_do_mes_atual():
+    """
+    devolve (inicio, fim) do mes atual: inicio inclusive, fim exclusivo (dia 1 do mes seguinte)
+    sem o limite de fim, lancamentos com data de meses futuros eram somados no mes atual
+    """
+    agora = datetime.utcnow()
+    inicio_mes = agora.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return inicio_mes, inicio_mes + relativedelta(months=1)
+
+
 def gastos_por_categoria(usuario_id: int) -> dict:
     """
     retorna um dicionario com o total gasto em cada categoria no mes atual
     so conta as despesas (valores negativos)
     """
-    agora = datetime.utcnow()
-    inicio_mes = agora.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    inicio_mes, fim_mes = _limites_do_mes_atual()
 
     transacoes = Transacao.query.filter(
         Transacao.usuario_id == usuario_id,
         Transacao.data >= inicio_mes,
+        Transacao.data < fim_mes,
         Transacao.valor < 0  # so despesas
     ).all()
 
@@ -66,12 +78,12 @@ def resumo_mensal(usuario_id: int) -> dict:
     """
     calcula receita total, despesa total e saldo do mes atual
     """
-    agora = datetime.utcnow()
-    inicio_mes = agora.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    inicio_mes, fim_mes = _limites_do_mes_atual()
 
     transacoes = Transacao.query.filter(
         Transacao.usuario_id == usuario_id,
-        Transacao.data >= inicio_mes
+        Transacao.data >= inicio_mes,
+        Transacao.data < fim_mes
     ).all()
 
     receita = sum(t.valor for t in transacoes if t.valor > 0)
