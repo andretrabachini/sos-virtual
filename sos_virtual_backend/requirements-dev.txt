@@ -1,0 +1,2 @@
+# só para desenvolvimento e testes (não precisa instalar em produção)
+pytest>=8

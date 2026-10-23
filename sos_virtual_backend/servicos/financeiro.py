@@ -3,6 +3,9 @@ from datetime import datetime
 
 from dateutil.relativedelta import relativedelta
 
+# a deteccao de categoria mora em servicos/categorizacao.py; o nome continua importavel daqui
+from servicos.categorizacao import detectar_categoria  # noqa: F401
+
 
 # categorias disponiveis no sistema
 CATEGORIAS = [
@@ -16,31 +19,6 @@ CATEGORIAS = [
     "Investimentos",
     "Outros"
 ]
-
-
-def detectar_categoria(texto: str) -> str:
-    """
-    tenta adivinhar a categoria de uma transacao com base nas palavras da descricao
-    se nao encontrar nenhuma correspondencia, retorna 'Outros'
-    """
-    texto = texto.lower()
-
-    regras = {
-        "Alimentação": ["mercado", "restaurante", "almoço", "jantar", "lanche", "ifood", "comida", "padaria"],
-        "Transporte":  ["uber", "99", "gasolina", "ônibus", "metrô", "passagem", "carro", "combustivel"],
-        "Saúde":       ["farmácia", "médico", "consulta", "remédio", "plano de saúde", "dentista", "hospital"],
-        "Educação":    ["curso", "faculdade", "livro", "escola", "mensalidade", "apostila"],
-        "Lazer":       ["cinema", "show", "netflix", "spotify", "viagem", "hotel", "jogo"],
-        "Moradia":     ["aluguel", "condomínio", "luz", "água", "internet", "energia", "gás"],
-        "Vestuário":   ["roupa", "tênis", "sapato", "camisa", "calça", "loja"],
-        "Investimentos": ["investimento", "poupança", "tesouro", "ação", "fundo"],
-    }
-
-    for categoria, palavras in regras.items():
-        if any(palavra in texto for palavra in palavras):
-            return categoria
-
-    return "Outros"
 
 
 def _limites_do_mes_atual():

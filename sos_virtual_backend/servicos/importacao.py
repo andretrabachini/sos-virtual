@@ -108,7 +108,7 @@ def importar_lancamentos(usuario_id, lancamentos, conta, valor_e_total=False, de
             resumo["duplicadas"] += 1
             continue
 
-        categoria = detectar_categoria(descricao)
+        categoria = detectar_categoria(descricao, valor)
         db.session.add(Transacao(
             usuario_id=usuario_id,
             descricao=descricao,

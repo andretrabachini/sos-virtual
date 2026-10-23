@@ -14,6 +14,8 @@
 .opcoes input{margin-top:.25rem;accent-color:var(--brand)}
 .campo input[type=file]{padding:.5rem}
 #resimp ul{margin:.4rem 0 .4rem 1.2rem}
+.cat-sel{max-width:11.5rem;padding:.3rem .5rem;border:1.5px solid var(--line);border-radius:var(--r);background:#fff;color:var(--ink);font:inherit;font-size:.88rem}
+#sugestao{min-height:1.3rem;font-size:.88rem}
 </style></head>
 <body data-pagina="transacoes">
 <div class="app"><aside id="menu"></aside>
@@ -28,6 +30,7 @@
   <section class="painel"><h2>Nova transação</h2>
     <form id="form" class="form-grid">
       <div class="campo larga"><label for="descricao">Descrição</label><input id="descricao" placeholder="Ex.: mercado, salário, Netflix" required></div>
+      <div class="campo larga" style="margin:-.4rem 0 .8rem"><div class="rot" id="sugestao" aria-live="polite"></div></div>
       <div class="campo"><label for="valor">Valor (R$)</label><input type="number" id="valor" step="0.01" min="0.01" required></div>
       <div class="campo"><label for="tipo">Tipo</label><select id="tipo"><option value="despesa">Despesa</option><option value="receita">Receita</option></select></div>
       <div class="campo"><label for="categoria">Categoria</label><select id="categoria"></select></div>
@@ -54,20 +57,45 @@
 </main></div>
 <script src="js/app.js"></script>
 <script>
-const CATS=['Alimentação','Transporte','Saúde','Educação','Lazer','Moradia','Vestuário','Investimentos','Salário','Outros'];
-categoria.innerHTML='<option value="">Detectar automaticamente</option>'+CATS.map(c=>'<option>'+c+'</option>').join('');
+// "Salário" só existe para receitas; as demais categorias valem para os dois tipos
+const CATS_DESP=['Alimentação','Transporte','Saúde','Educação','Lazer','Moradia','Vestuário','Investimentos','Outros'];
+const CATS_REC=['Alimentação','Transporte','Saúde','Educação','Lazer','Moradia','Vestuário','Investimentos','Salário','Outros'];
+const catsDo=valor=>valor>0?CATS_REC:CATS_DESP;
+// formulário: troca a lista ao mudar o tipo e mantém a escolha se ela ainda for válida
+function montarCategorias(){const atual=categoria.value,lista=catsDo(tipo.value==='receita'?1:-1);
+  categoria.innerHTML='<option value="">Automática</option>'+lista.map(c=>'<option'+(c===atual?' selected':'')+'>'+c+'</option>').join('');}
+// histórico: se a categoria gravada não estiver na lista (dado antigo), ela é mantida em vez de ser trocada sem aviso
+const optsLinha=(lista,atual)=>(lista.includes(atual)?lista:[atual].concat(lista)).map(c=>'<option'+(c===atual?' selected':'')+'>'+esc(c)+'</option>').join('');
+// prévia: mostra a categoria que a detecção automática vai escolher, antes de salvar
+let tSug=null,seqSug=0;
+function sugerir(){
+  clearTimeout(tSug);seqSug++;
+  const d=descricao.value.trim();
+  if(categoria.value||!d){sugestao.textContent='';return;}
+  tSug=setTimeout(async()=>{const minha=++seqSug;
+    try{const r=await api('/transacoes/sugerir-categoria',{method:'POST',body:JSON.stringify({descricao:d,valor:tipo.value==='receita'?1:-1})});
+      if(minha!==seqSug||categoria.value)return;   // resposta antiga, ou o usuário escolheu a categoria no meio do caminho
+      sugestao.innerHTML=r.motivo?'Será classificada como <b>'+esc(r.categoria)+'</b> (pela palavra “'+esc(r.motivo)+'”).'
+        :'Categoria não reconhecida: ficará em <b>Outros</b>. Escolha uma categoria se preferir.';
+    }catch(e){if(minha===seqSug)sugestao.textContent='';}},400);}
+descricao.addEventListener('input',sugerir);categoria.addEventListener('change',sugerir);
+tipo.addEventListener('change',()=>{montarCategorias();sugerir();});
+montarCategorias();
 const hoje=new Date();mesf.value=hoje.getFullYear()+'-'+String(hoje.getMonth()+1).padStart(2,'0');
 async function carregar(){try{
   aviso('msg');
   const l=await api('/transacoes?mes='+mesf.value);
   const r=l.filter(t=>t.valor>0).reduce((s,t)=>s+t.valor,0),d=l.filter(t=>t.valor<0).reduce((s,t)=>s-t.valor,0);
   rec.textContent=brl(r);des.textContent=brl(d);sal.textContent=brl(r-d);sal.className='num '+(r-d<0?'neg':'pos');
-  tb.innerHTML=l.length?l.map(t=>'<tr><td>'+new Date(t.data).toLocaleDateString('pt-BR')+'</td><td>'+esc(t.descricao)+'</td><td>'+esc(t.categoria)+'</td><td class="'+(t.valor>0?'pos':'neg')+'">'+(t.valor>0?'+':'−')+brl(Math.abs(t.valor))+'</td><td><button class="btn perigo peq" data-del="'+t.id+'">Excluir</button></td></tr>').join(''):'<tr><td colspan="5" class="vazio">Nenhuma transação neste mês.</td></tr>';
+  tb.innerHTML=l.length?l.map(t=>'<tr><td>'+new Date(t.data).toLocaleDateString('pt-BR')+'</td><td>'+esc(t.descricao)+'</td><td><select class="cat-sel" data-cat-id="'+t.id+'" aria-label="Categoria de '+esc(t.descricao)+'">'+optsLinha(catsDo(t.valor),t.categoria)+'</select></td><td class="'+(t.valor>0?'pos':'neg')+'">'+(t.valor>0?'+':'−')+brl(Math.abs(t.valor))+'</td><td><button class="btn perigo peq" data-del="'+t.id+'">Excluir</button></td></tr>').join(''):'<tr><td colspan="5" class="vazio">Nenhuma transação neste mês.</td></tr>';
 }catch(e){aviso('msg',msgErro(e),'erro');}}
 form.addEventListener('submit',async e=>{e.preventDefault();
   const v=parseFloat(valor.value);
-  try{await api('/transacoes',{method:'POST',body:JSON.stringify({descricao:descricao.value.trim(),valor:tipo.value==='despesa'?-v:v,categoria:categoria.value||undefined})});form.reset();carregar();}
+  try{await api('/transacoes',{method:'POST',body:JSON.stringify({descricao:descricao.value.trim(),valor:tipo.value==='despesa'?-v:v,categoria:categoria.value||undefined})});form.reset();montarCategorias();sugerir();carregar();}
   catch(err){aviso('msg',msgErro(err),'erro');}});
+tb.addEventListener('change',async e=>{const s=e.target;if(!s.dataset.catId)return;
+  try{await api('/transacoes/'+s.dataset.catId,{method:'PUT',body:JSON.stringify({categoria:s.value})});carregar();}
+  catch(err){await carregar();aviso('msg',msgErro(err),'erro');}});   // em caso de erro volta ao valor salvo e mostra o motivo
 tb.addEventListener('click',async e=>{const id=e.target.dataset.del;
   if(id&&confirm('Excluir esta transação?'))try{await api('/transacoes/'+id,{method:'DELETE'});carregar();}catch(err){aviso('msg',msgErro(err),'erro');}});
 mesf.addEventListener('change',carregar);carregar();

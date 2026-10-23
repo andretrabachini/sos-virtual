@@ -5,9 +5,10 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 
 from database import db
-from extensoes import usuario_id_atual
-from modelos.modelos import Transacao
-from servicos.financeiro import CATEGORIAS, detectar_categoria
+from extensoes import limiter, usuario_id_atual
+from modelos.modelos import Aresta, No, Transacao
+from servicos.categorizacao import detectar_categoria_com_motivo
+from servicos.financeiro import CATEGORIAS
 from validacao import VALOR_MAX, corpo_json, erro, numero, texto
 
 transacoes_bp = Blueprint("transacoes", __name__, url_prefix="/api/transacoes")
@@ -18,9 +19,28 @@ CATEGORIAS_VALIDAS = set(CATEGORIAS) | {"Salário"}
 # formato do filtro de mes: "2026-04"
 MES_RE = re.compile(r"^(\d{4})-(0[1-9]|1[0-2])$")
 
+MSG_SALARIO = "a categoria Salário só vale para receitas"
+
 
 def _categoria_valida(valor):
     return isinstance(valor, str) and valor in CATEGORIAS_VALIDAS
+
+
+def _mover_projecoes(usuario_id, descricao, categoria):
+    """
+    ao trocar a categoria de uma compra parcelada, as parcelas futuras projetadas a partir
+    dela (mesma descricao) passam a apontar para a nova categoria no grafo
+    """
+    projecoes = Aresta.query.filter_by(usuario_id=usuario_id, descricao=descricao, projetada=True).all()
+    if not projecoes:
+        return
+    no = No.query.filter_by(usuario_id=usuario_id, nome=categoria, tipo="categoria").first()
+    if no is None:
+        no = No(usuario_id=usuario_id, nome=categoria, tipo="categoria")
+        db.session.add(no)
+        db.session.flush()
+    for aresta in projecoes:
+        aresta.destino_id = no.id
 
 
 @transacoes_bp.route("", methods=["GET"])
@@ -47,6 +67,33 @@ def listar():
     return jsonify([t.para_dict() for t in transacoes])
 
 
+@transacoes_bp.route("/sugerir-categoria", methods=["POST"])
+@jwt_required()
+@limiter.limit("120 per minute")
+def sugerir_categoria():
+    """
+    previa da deteccao automatica, para a tela mostrar a categoria ANTES de salvar:
+      {"descricao": "mercado", "valor": -50}  ->  {"categoria": "Alimentação", "motivo": "mercado"}
+    o sinal do valor importa: so receitas (valor positivo) podem ser "Salário"
+    """
+    dados = corpo_json()
+    if dados is None:
+        return erro("corpo da requisição inválido")
+
+    descricao = texto(dados.get("descricao"), 1, 255)
+    if descricao is None:
+        return erro("informe a descrição (até 255 caracteres)")
+
+    valor = None
+    if dados.get("valor") is not None:
+        valor = numero(dados["valor"], -VALOR_MAX, VALOR_MAX)
+        if valor is None:
+            return erro("valor inválido")
+
+    categoria, motivo = detectar_categoria_com_motivo(descricao, valor)
+    return jsonify({"categoria": categoria, "motivo": motivo})
+
+
 @transacoes_bp.route("", methods=["POST"])
 @jwt_required()
 def criar():
@@ -64,12 +111,15 @@ def criar():
     if valor is None or valor == 0:
         return erro("valor inválido (diferente de zero)")
 
-    # se a categoria nao vier no body, tenta detectar automaticamente pela descricao
+    # se a categoria nao vier no body, detecta pela descricao (e pelo sinal do valor)
     categoria = dados.get("categoria")
     if categoria in (None, ""):
-        categoria = detectar_categoria(descricao)
+        categoria, _ = detectar_categoria_com_motivo(descricao, valor)
     elif not _categoria_valida(categoria):
         return erro("categoria inválida")
+
+    if categoria == "Salário" and valor < 0:
+        return erro(MSG_SALARIO)
 
     nova = Transacao(
         usuario_id=usuario_id,
@@ -95,23 +145,33 @@ def editar(transacao_id):
     if dados is None:
         return erro("corpo da requisição inválido")
 
-    # valida cada campo; se algum for invalido, retorna erro antes do commit e nada e salvo
+    # valida tudo primeiro; so depois altera (se algo for invalido, nada e salvo)
+    nova_descricao, novo_valor, nova_categoria = t.descricao, t.valor, t.categoria
+
     if "descricao" in dados:
-        descricao = texto(dados["descricao"], 1, 255)
-        if descricao is None:
+        nova_descricao = texto(dados["descricao"], 1, 255)
+        if nova_descricao is None:
             return erro("descrição inválida (até 255 caracteres)")
-        t.descricao = descricao
 
     if "valor" in dados:
-        valor = numero(dados["valor"], -VALOR_MAX, VALOR_MAX)
-        if valor is None or valor == 0:
+        novo_valor = numero(dados["valor"], -VALOR_MAX, VALOR_MAX)
+        if novo_valor is None or novo_valor == 0:
             return erro("valor inválido (diferente de zero)")
-        t.valor = valor
 
     if "categoria" in dados:
         if not _categoria_valida(dados["categoria"]):
             return erro("categoria inválida")
-        t.categoria = dados["categoria"]
+        nova_categoria = dados["categoria"]
+
+    # vale para a combinacao final: trocar o sinal de uma receita "Salário" tambem e barrado
+    if nova_categoria == "Salário" and novo_valor < 0:
+        return erro(MSG_SALARIO + " (troque também a categoria)")
+
+    categoria_mudou = nova_categoria != t.categoria
+    t.descricao, t.valor, t.categoria = nova_descricao, novo_valor, nova_categoria
+
+    if categoria_mudou:
+        _mover_projecoes(usuario_id, t.descricao, nova_categoria)
 
     db.session.commit()
     return jsonify(t.para_dict())
