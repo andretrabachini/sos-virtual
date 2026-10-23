@@ -1,49 +1,165 @@
+"""
+roteamento otimizado de pagamentos com grafos (fluxo de custo minimo)
+
+o grafo tem 4 camadas:
+    S (super fonte) -> contas/cartoes -> categorias de despesa -> T (super sumidouro)
+
+- S -> conta:       capacidade = quanto a conta consegue pagar no mes (limite do cartao, saldo)
+                    custo = % por R$ pago (negativo = cashback/beneficio, positivo = juros/taxa)
+- conta -> categoria: por padrao toda conta pode pagar toda categoria (ou so o que for
+                    informado em `transacoes`, com um limite por ligacao)
+- categoria -> T:   capacidade = valor da despesa, que precisa ser paga por inteiro
+
+o algoritmo (network simplex, do networkx) trabalha melhor com numeros INTEIROS. por isso tudo roda em
+centavos, e o custo em "centesimos de ponto percentual por centavo" (1,5% -> 150)
+"""
 import networkx as nx
 
-def calcular_roteamento_otimizado(orcamento_total, contas, despesas, transacoes):
+# R$ = centavos * custo_inteiro / 1_000_000 (centavos -> reais /100; centesimos de % -> fracao /10_000)
+ESCALA_CUSTO = 1_000_000
+
+
+def _centavos(valor):
+    return int(round(float(valor) * 100))
+
+
+def _reais(centavos):
+    return round(centavos / 100, 2)
+
+
+def _brl(centavos):
+    texto = f"{centavos / 100:,.2f}"          # 1,234.56
+    return "R$ " + texto.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _peso(custo_percentual):
+    """1,5 (% de cashback com sinal negativo: -1,5) -> inteiro usado como peso da aresta"""
+    return int(round(float(custo_percentual or 0) * 100))
+
+
+def _dinheiro(valor_centavos, peso):
+    """efeito em R$ de pagar `valor_centavos` numa conta de peso `peso` (positivo = ganho/cashback)"""
+    return round(-valor_centavos * peso / ESCALA_CUSTO, 2) + 0.0   # "+ 0.0" evita o -0.0
+
+
+def calcular_roteamento_otimizado(contas, despesas, transacoes=None):
     """
-    Constrói a rede de fluxo financeiro e retorna a melhor estratégia de pagamento.
-    
-    :param orcamento_total: Float com o total de despesas do mês.
-    :param contas: Lista de dicionários vindos da tabela 'nos' (tipo 'conta').
-    :param despesas: Lista de dicionários vindos da tabela 'nos' (tipo 'categoria').
-    :param transacoes: Lista de dicionários vindos da tabela 'arestas'.
+    :param contas: lista de dicts {"id", "nome", "capacidade" (R$ ou None = sem limite), "custo" (%)}
+    :param despesas: dict {categoria: valor em R$} - o que precisa ser pago no mes
+    :param transacoes: opcional, lista de {"conta_id", "categoria", "limite"}: restringe quais contas
+                       podem pagar quais categorias. sem isso, toda conta paga toda categoria
+    :return: dict com status "sucesso", "gargalo" ou "vazio" (nunca levanta erro de negocio)
     """
-    # 1. Inicializa o Grafo Direcionado
+    demanda = {}
+    for categoria, valor in despesas.items():
+        centavos = _centavos(valor)
+        if centavos > 0:
+            demanda[categoria] = centavos
+
+    if not contas:
+        return {"status": "vazio", "mensagem": "Cadastre pelo menos uma conta ou cartão para calcular."}
+    if not demanda:
+        return {"status": "vazio", "mensagem": "Não há despesas para distribuir."}
+
+    total = sum(demanda.values())
+
+    # conta sem limite informado: pode pagar qualquer valor (limitada so pelo total das despesas)
+    capacidade = {
+        c["id"]: total if c.get("capacidade") is None else _centavos(c["capacidade"])
+        for c in contas
+    }
+
+    def gargalo(capacidade_total):
+        falta = total - capacidade_total
+        return {
+            "status": "gargalo",
+            "mensagem": (f"Gargalo detectado! O limite das contas ({_brl(capacidade_total)}) "
+                         f"não cobre as despesas ({_brl(total)}). Faltam {_brl(falta)}."),
+            "total_despesas": _reais(total),
+            "capacidade_total": _reais(capacidade_total),
+            "falta": _reais(falta),
+        }
+
+    if sum(capacidade.values()) < total:
+        return gargalo(sum(capacidade.values()))
+
+    # ---------- monta o grafo ----------
     G = nx.DiGraph()
+    G.add_node("S", demand=-total)   # injeta o dinheiro
+    G.add_node("T", demand=total)    # consome o dinheiro
 
-    # 2. Injeta os Nós Virtuais (Super Fonte S e Super Sumidouro T)
-    G.add_node('S', demand=-orcamento_total)  # Injeta o dinheiro
-    G.add_node('T', demand=orcamento_total)   # Consome o dinheiro
+    no_conta = {c["id"]: f"conta:{c['id']}" for c in contas}
+    pesos = {c["id"]: _peso(c.get("custo")) for c in contas}
 
-    # 3. Camada 1: Conecta a Fonte (S) aos Ativos (Contas/Cartões)
-    for conta in contas:
-        # Exemplo de 'conta': {'id': 'Conta Corrente', 'capacidade': 5000, 'custo': 0}
-        G.add_edge('S', conta['id'], capacity=conta['capacidade'], weight=conta['custo'])
+    # camada 1: fonte -> contas (o beneficio/custo e cobrado aqui, uma vez por real que passa pela conta)
+    for c in contas:
+        G.add_edge("S", no_conta[c["id"]], capacity=capacidade[c["id"]], weight=pesos[c["id"]])
 
-    # 4. Camada 2: O Miolo (Transações reais entre Contas e Despesas)
-    for t in transacoes:
-        # Exemplo de 't': {'origem': 'Conta Corrente', 'destino': 'Aluguel', 'limite': 2000}
-        # O peso aqui é 0 porque o benefício (cashback/juros) já foi cobrado na Camada 1
-        G.add_edge(t['origem'], t['destino'], capacity=t['limite'], weight=0)
+    # camada 2: contas -> categorias (sem custo proprio)
+    if transacoes is None:
+        for c in contas:
+            for categoria, valor in demanda.items():
+                G.add_edge(no_conta[c["id"]], f"cat:{categoria}", capacity=valor, weight=0)
+    else:
+        for t in transacoes:
+            if t["conta_id"] in no_conta and t["categoria"] in demanda:
+                G.add_edge(no_conta[t["conta_id"]], f"cat:{t['categoria']}",
+                           capacity=_centavos(t["limite"]), weight=0)
 
-    # 5. Camada 3: Conecta as Demandas (Despesas) ao Sumidouro (T)
-    for despesa in despesas:
-        # Exemplo de 'despesa': {'id': 'Aluguel', 'valor_fatura': 2000}
-        G.add_edge(despesa['id'], 'T', capacity=despesa['valor_fatura'], weight=0)
+    # camada 3: categorias -> sumidouro (cada despesa precisa ser paga por inteiro)
+    for categoria, valor in demanda.items():
+        G.add_edge(f"cat:{categoria}", "T", capacity=valor, weight=0)
 
-    # 6. Roda o Algoritmo de Custo Mínimo e Fluxo Máximo
+    # ---------- resolve ----------
     try:
-        custo_fluxo, dicionario_fluxo = nx.capacity_scaling(G)
-        
-        # Formata a resposta para o Front-End (JSON)
-        return {
-            "status": "sucesso",
-            "retorno_financeiro": abs(custo_fluxo), # Mostra o quanto o usuário economizou
-            "estrategia_pagamento": dicionario_fluxo['S'] # Mostra quanto tirar de cada conta
-        }
+        # network simplex: alem de achar o custo minimo, devolve solucoes "basicas", que dividem poucas
+        # despesas entre contas (capacity scaling achava o mesmo custo, mas picotava mais os pagamentos)
+        custo_total, fluxo = nx.network_simplex(G)
     except nx.NetworkXUnfeasible:
-        return {
-            "status": "erro",
-            "mensagem": "Gargalo detectado! O limite das contas não cobre as despesas."
+        # com restricoes (transacoes), o total das contas pode bastar mas as ligacoes nao
+        return gargalo(sum(capacidade.values())) if sum(capacidade.values()) < total else {
+            "status": "gargalo",
+            "mensagem": "Gargalo detectado! As contas liberadas para cada despesa não conseguem cobrir o valor total.",
+            "total_despesas": _reais(total),
         }
+
+    # ---------- monta a resposta ----------
+    plano, nos, usado_por_conta = [], [], {}
+    for c in contas:
+        origem = no_conta[c["id"]]
+        usado = fluxo["S"].get(origem, 0)
+        usado_por_conta[c["id"]] = usado
+        for categoria in demanda:
+            valor = fluxo.get(origem, {}).get(f"cat:{categoria}", 0)
+            if valor > 0:
+                plano.append({
+                    "conta_id": c["id"],
+                    "conta": c["nome"],
+                    "categoria": categoria,
+                    "valor": _reais(valor),
+                    "efeito": _dinheiro(valor, pesos[c["id"]]),
+                })
+        nos.append({
+            "id": origem,
+            "nome": c["nome"],
+            "tipo": "conta",
+            "usado": _reais(usado),
+            "capacidade": None if c.get("capacidade") is None else _reais(capacidade[c["id"]]),
+            "custo": float(c.get("custo") or 0),
+            "efeito": _dinheiro(usado, pesos[c["id"]]),
+        })
+    for categoria, valor in demanda.items():
+        nos.append({"id": f"cat:{categoria}", "nome": categoria, "tipo": "categoria", "valor": _reais(valor)})
+
+    return {
+        "status": "sucesso",
+        "total_despesas": _reais(total),
+        # custo_total e negativo quando ha cashback: o beneficio liquido e o oposto dele
+        "beneficio_total": round(-custo_total / ESCALA_CUSTO, 2) + 0.0,
+        "plano": plano,
+        "nos": nos,
+        "arestas": [
+            {"origem": f"conta:{p['conta_id']}", "destino": f"cat:{p['categoria']}", "valor": p["valor"]}
+            for p in plano
+        ],
+    }

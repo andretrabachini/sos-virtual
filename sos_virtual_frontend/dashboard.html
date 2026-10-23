@@ -21,7 +21,7 @@
   </section>
   <div class="duas">
     <section class="painel"><h2>Gastos por categoria</h2><div id="cats"></div></section>
-    <section class="painel"><h2>Para onde o dinheiro vai</h2><div id="grafo">O mapa de contas e despesas aparecerá aqui quando o módulo de grafos estiver ligado.</div></section>
+    <section class="painel"><h2>Para onde o dinheiro vai</h2><div id="grafo">Carregando…</div></section>
   </div>
   <section class="painel"><h2>Parcelas dos próximos meses</h2><div id="proj"><p class="vazio">Carregando…</p></div></section>
   <section class="painel"><div class="filtro"><h2>Últimas transações</h2><a href="transacoes.html">Ver todas</a></div>
@@ -29,6 +29,7 @@
   </section>
 </main></div>
 <script src="js/app.js"></script>
+<script src="js/grafo_visualizador.js"></script>
 <script>
 const u=usuarioAtual();ola.textContent='Olá, '+((u.nome||'').split(' ')[0]||'bem-vindo');
 (async()=>{try{
@@ -41,6 +42,16 @@ const u=usuarioAtual();ola.textContent='Olá, '+((u.nome||'').split(' ')[0]||'be
   cats.innerHTML=c.length?c.map(([n,v])=>'<div class="linha"><span>'+esc(n)+'</span><b>'+brl(v)+'</b></div><div class="barra"><i style="width:'+v/max*100+'%"></i></div>').join(''):'<p class="vazio">Nenhum gasto neste mês ainda.</p>';
   tb.innerHTML=d.transacoes_recentes.length?d.transacoes_recentes.map(t=>'<tr><td>'+new Date(t.data).toLocaleDateString('pt-BR')+'</td><td>'+esc(t.descricao)+'</td><td>'+esc(t.categoria)+'</td><td class="'+(t.valor>0?'pos':'neg')+'">'+(t.valor>0?'+':'−')+brl(Math.abs(t.valor))+'</td></tr>').join(''):'<tr><td colspan="4" class="vazio">Nenhuma transação ainda.</td></tr>';
 }catch(e){aviso('msg',msgErro(e),'erro');}})();
+
+// mapa "para onde o dinheiro vai": a melhor forma de pagar as despesas do mês (grafo de fluxo de custo mínimo)
+(async()=>{try{
+  const g=await api('/grafo');
+  if(g.status==='sucesso'){
+    grafo.style.cssText='height:auto;border:0;display:block;padding:0';
+    desenharGrafo(grafo,g);
+    grafo.insertAdjacentHTML('beforeend','<p class="rot" style="margin-top:.6rem">'+(g.beneficio_total<0?'Custo estimado de juros e taxas: ':'Benefício estimado de cashback: ')+'<b>'+brl(Math.abs(g.beneficio_total))+'</b> · <a href="grafo.html">ver detalhes e simular</a></p>');
+  }else grafo.innerHTML='<div>'+esc(g.mensagem)+'<br><a href="grafo.html">Cadastrar contas e cartões</a></div>';
+}catch(e){grafo.textContent=msgErro(e);}})();
 
 // projeção das parcelas futuras (vem das arestas criadas na importação de extratos)
 (async()=>{try{

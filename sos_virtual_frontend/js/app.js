@@ -44,6 +44,7 @@ function sair() {
     ['transacoes', 'Transações', 'transacoes.html'],
     ['metas', 'Metas', 'metas.html'],
     ['alertas', 'Alertas', 'alertas.html'],
+    ['otimizador', 'Otimizador', 'grafo.html'],
     ['assistente', 'Assistente', 'assistente.html']
   ];
   const atual = document.body.dataset.pagina;

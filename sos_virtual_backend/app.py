@@ -122,6 +122,7 @@ from rotas.metas import metas_bp
 from rotas.dashboard import dashboard_bp
 from rotas.alertas import alertas_bp
 from rotas.simulacoes import simulacoes_bp
+from rotas.grafos import grafos_bp
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(transacoes_bp)
@@ -129,6 +130,7 @@ app.register_blueprint(metas_bp)
 app.register_blueprint(dashboard_bp)
 app.register_blueprint(alertas_bp)
 app.register_blueprint(simulacoes_bp)
+app.register_blueprint(grafos_bp)
 
 if __name__ == "__main__":
     with app.app_context():
