@@ -7,7 +7,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/estilo.css">
-<title>Otimizador — SOS Virtual</title></head>
+<title>Otimizador — SOS Virtual</title>
+<style>.catgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(10.5rem,1fr));gap:.5rem 1rem;margin-top:.7rem}.catgrid label{display:flex;gap:.5rem;align-items:center;font-size:.9rem;color:var(--ink)}.catgrid input{accent-color:var(--brand)}.presets{display:flex;gap:.5rem;flex-wrap:wrap}</style></head>
 <body data-pagina="otimizador">
 <div class="app"><aside id="menu"></aside>
 <main class="conteudo">
@@ -17,9 +18,15 @@
   <section class="painel"><h2>Minhas contas e cartões</h2>
     <form id="formconta" class="form-grid">
       <div class="campo larga"><label for="cnome">Nome</label><input id="cnome" maxlength="100" placeholder="Ex.: Cartão Nubank, Conta Corrente" required></div>
-      <div class="campo"><label for="ccap">Limite do mês (R$, opcional)</label><input type="number" id="ccap" step="0.01" min="0.01" placeholder="Sem limite informado"></div>
+      <div class="campo"><label for="ccap">Limite ou saldo do mês (R$, opcional)</label><input type="number" id="ccap" step="0.01" min="0.01" placeholder="Sem limite informado"></div>
       <div class="campo"><label for="ctipo">Benefício ou custo</label><select id="ctipo"><option value="beneficio">Cashback / benefício</option><option value="custo">Juros / taxa</option></select></div>
       <div class="campo"><label for="cpct">Percentual (%)</label><input type="number" id="cpct" step="0.01" min="0" max="100" placeholder="0"></div>
+      <fieldset style="grid-column:1/-1;border:0;padding:0;margin:0 0 1rem">
+        <legend style="font-weight:600;font-size:.9rem;margin-bottom:.3rem">Categorias que esta conta pode pagar</legend>
+        <p class="rot" style="margin-bottom:.6rem">Deixe tudo desmarcado para uma conta comum, que paga qualquer categoria. Marque só algumas para um <b>vale</b>: ele paga apenas essas categorias e é usado primeiro nelas, porque o saldo não serve para o resto.</p>
+        <div class="presets"><button type="button" class="btn sec peq" data-preset="Alimentação">Vale alimentação / refeição</button><button type="button" class="btn sec peq" data-preset="Transporte">Vale transporte</button><button type="button" class="btn sec peq" data-preset="">Qualquer categoria</button></div>
+        <div class="catgrid" id="catbox"></div>
+      </fieldset>
       <div class="campo"><button class="btn" id="btnconta" type="submit" style="width:100%">Adicionar conta</button></div>
       <div class="campo" id="cancelarbox" hidden><button class="btn sec" id="cancelar" type="button" style="width:100%">Cancelar edição</button></div>
     </form>
@@ -41,12 +48,17 @@ const CATS=['Alimentação','Transporte','Saúde','Educação','Lazer','Moradia'
 let minhasContas=[],editando=null;
 const pctTxt=v=>Math.abs(v).toLocaleString('pt-BR',{maximumFractionDigits:2})+'%';
 const efeitoTxt=v=>v>0?'<span class="pos">+'+brl(v)+'</span>':v<0?'<span class="neg">−'+brl(-v)+'</span>':'<span class="rot">—</span>';
+const catbox_=()=>[...document.querySelectorAll('#catbox input')];
+const categoriasMarcadas=()=>catbox_().filter(i=>i.checked).map(i=>i.dataset.c);
+const marcar=lista=>catbox_().forEach(i=>{i.checked=lista.includes(i.dataset.c);});
+const regraConta=c=>c.categorias&&c.categorias.length?'<b>Só paga:</b> '+esc(c.categorias.join(', '))+' · usada primeiro nelas':'Paga qualquer categoria';
 const beneficio=c=>c.custo<0?'<b class="pos">Cashback de '+pctTxt(c.custo)+'</b>':c.custo>0?'<b class="neg">Juros/taxa de '+pctTxt(c.custo)+'</b>':'<span class="rot">Sem benefício ou custo</span>';
 
 async function carregarContas(){
   minhasContas=await api('/contas');
   listac.innerHTML=minhasContas.length?minhasContas.map(c=>'<div class="painel"><div class="linha"><h3>'+esc(c.nome)+'</h3>'+beneficio(c)+'</div>'+
-    '<div class="rot">'+(c.capacidade?'Limite do mês: '+brl(c.capacidade):'Sem limite informado')+'</div>'+
+    '<div class="rot">'+(c.capacidade?'Limite ou saldo do mês: '+brl(c.capacidade):'Sem limite informado')+'</div>'+
+    '<div class="rot">'+regraConta(c)+'</div>'+
     '<div class="acoes-linha"><button class="btn sec peq" data-edit="'+c.id+'">Editar</button><button class="btn perigo peq" data-del="'+c.id+'">Excluir</button></div></div>').join('')
     :'<p class="vazio">Nenhuma conta ainda. Cadastre acima as contas e cartões que você usa.</p>';
 }
@@ -56,14 +68,17 @@ async function carregarDespesas(){
 }
 function mostrar(r){
   const corpo=document.getElementById('res-corpo');resp.hidden=false;
-  if(r.status!=='sucesso'){corpo.innerHTML='<div class="aviso" style="margin:0">'+esc(r.mensagem)+'</div>';return;}
+  const gargalo=r.status==='gargalo';
+  if(!r.nos){corpo.innerHTML='<div class="aviso" style="margin:0">'+esc(r.mensagem)+'</div>';return;}   // sem contas ou sem despesas
   const b=r.beneficio_total;
-  corpo.innerHTML='<div class="grid"><div class="painel"><div class="rot">Total a pagar</div><div class="num">'+brl(r.total_despesas)+'</div></div>'+
+  corpo.innerHTML=(gargalo?'<div class="aviso" style="margin:0 0 1rem">'+esc(r.mensagem)+'</div>':'')+
+    '<div class="grid"><div class="painel"><div class="rot">Total a pagar</div><div class="num">'+brl(r.total_despesas)+'</div></div>'+
+    (gargalo?'<div class="painel"><div class="rot">Sem conta para pagar</div><div class="num neg">'+brl(r.falta)+'</div></div>':'')+
     '<div class="painel"><div class="rot">'+(b<0?'Custo líquido (juros e taxas)':'Benefício líquido (cashback)')+'</div><div class="num '+(b<0?'neg':'pos')+'">'+brl(Math.abs(b))+'</div></div></div>'+
-    '<div id="grafo-svg"></div><h3 style="margin:1.4rem 0 .5rem">Como pagar</h3>'+
-    '<table><thead><tr><th>Conta</th><th>Despesa</th><th>Valor</th><th>Efeito</th></tr></thead><tbody>'+
-    r.plano.map(p=>'<tr><td>'+esc(p.conta)+'</td><td>'+esc(p.categoria)+'</td><td>'+brl(p.valor)+'</td><td>'+efeitoTxt(p.efeito)+'</td></tr>').join('')+'</tbody></table>'+
-    '<p class="rot" style="margin-top:.8rem">Efeito: verde é cashback ganho; vermelho é juros ou taxa paga. O cálculo escolhe a combinação que mais economiza respeitando o limite de cada conta.</p>';
+    '<div id="grafo-svg"></div><h3 style="margin:1.4rem 0 .5rem">'+(gargalo?'O que dá para pagar':'Como pagar')+'</h3>'+
+    (r.plano.length?'<table><thead><tr><th>Conta</th><th>Despesa</th><th>Valor</th><th>Efeito</th></tr></thead><tbody>'+
+    r.plano.map(p=>'<tr><td>'+esc(p.conta)+'</td><td>'+esc(p.categoria)+'</td><td>'+brl(p.valor)+'</td><td>'+efeitoTxt(p.efeito)+'</td></tr>').join('')+'</tbody></table>':'<p class="vazio">Nenhuma conta consegue pagar essas despesas.</p>')+
+    '<p class="rot" style="margin-top:.8rem">Efeito: verde é cashback ganho; vermelho é juros ou taxa paga. O cálculo escolhe a combinação que mais economiza respeitando o limite e as categorias de cada conta. Contas restritas (vales) são usadas primeiro nas categorias que aceitam.</p>';
   desenharGrafo(document.getElementById('grafo-svg'),r);
 }
 async function calcular(){
@@ -71,21 +86,23 @@ async function calcular(){
   try{aviso('msg');mostrar(await api('/grafo/otimizar',{method:'POST',body:JSON.stringify({despesas:d})}));}
   catch(err){aviso('msg',msgErro(err),'erro');}
 }
-function limpar(){editando=null;formconta.reset();btnconta.textContent='Adicionar conta';cancelarbox.hidden=true;}
+function limpar(){editando=null;formconta.reset();marcar([]);btnconta.textContent='Adicionar conta';cancelarbox.hidden=true;}
 
 formconta.addEventListener('submit',async e=>{e.preventDefault();aviso('msg');
   const pct=parseFloat(cpct.value)||0;
-  const corpo={nome:cnome.value.trim(),capacidade:ccap.value?parseFloat(ccap.value):null,custo:ctipo.value==='custo'?pct:-pct};
+  const corpo={nome:cnome.value.trim(),capacidade:ccap.value?parseFloat(ccap.value):null,custo:ctipo.value==='custo'?pct:-pct,categorias:categoriasMarcadas()};
   try{
     if(editando)await api('/contas/'+editando,{method:'PUT',body:JSON.stringify(corpo)});
     else await api('/contas',{method:'POST',body:JSON.stringify(corpo)});
     limpar();await carregarContas();calcular();
   }catch(err){aviso('msg',msgErro(err),'erro');}});
 cancelar.addEventListener('click',limpar);
+catbox.innerHTML=CATS.map(c=>'<label><input type="checkbox" data-c="'+c+'"> '+c+'</label>').join('');
+document.querySelector('.presets').addEventListener('click',e=>{if(e.target.dataset.preset===undefined)return;marcar(e.target.dataset.preset?[e.target.dataset.preset]:[]);});
 listac.addEventListener('click',async e=>{const t=e.target.dataset;
   try{
     if(t.edit){const c=minhasContas.find(x=>String(x.id)===t.edit);if(!c)return;
-      editando=c.id;cnome.value=c.nome;ccap.value=c.capacidade??'';ctipo.value=c.custo>0?'custo':'beneficio';cpct.value=Math.abs(c.custo)||'';
+      editando=c.id;cnome.value=c.nome;ccap.value=c.capacidade??'';ctipo.value=c.custo>0?'custo':'beneficio';cpct.value=Math.abs(c.custo)||'';marcar(c.categorias||[]);
       btnconta.textContent='Salvar alterações';cancelarbox.hidden=false;cnome.focus();}
     else if(t.del&&confirm('Excluir esta conta? As parcelas futuras projetadas a partir dela também serão removidas.')){
       await api('/contas/'+t.del,{method:'DELETE'});if(String(editando)===t.del)limpar();await carregarContas();calcular();}

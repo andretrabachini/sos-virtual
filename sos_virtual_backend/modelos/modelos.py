@@ -27,6 +27,7 @@ class Usuario(db.Model):
     arestas = db.relationship("Aresta", backref="usuario", lazy=True, cascade="all, delete-orphan")
     nos = db.relationship("No", backref="usuario", lazy=True, cascade="all, delete-orphan")
     redefinicoes = db.relationship("RedefinicaoSenha", backref="usuario", lazy=True, cascade="all, delete-orphan")
+    contas_categorias = db.relationship("ContaCategoria", backref="usuario", lazy=True, cascade="all, delete-orphan")
 
     def para_dict(self):
         return {
@@ -204,3 +205,18 @@ class RedefinicaoSenha(db.Model):
 
     # preenchido quando o link e usado (ou quando um pedido mais novo o substitui): uso unico
     usado_em = db.Column(db.DateTime, nullable=True)
+
+
+# tabela de categorias aceitas por cada conta/cartao — ex.: um Vale Alimentação so paga "Alimentação"
+# conta SEM nenhuma linha aqui = aceita qualquer categoria (comportamento padrao)
+# conta COM linhas = restrita: so paga essas categorias e e usada primeiro nelas pelo otimizador
+class ContaCategoria(db.Model):
+    __tablename__ = "contas_categorias"
+    __table_args__ = (
+        db.UniqueConstraint("conta_id", "categoria", name="uq_conta_categoria"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=False, index=True)
+    conta_id = db.Column(db.Integer, db.ForeignKey("nos.id"), nullable=False, index=True)
+    categoria = db.Column(db.String(80), nullable=False)

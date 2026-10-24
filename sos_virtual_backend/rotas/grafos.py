@@ -1,10 +1,12 @@
+from collections import defaultdict
+
 from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required
 from sqlalchemy.exc import IntegrityError
 
 from database import db
 from extensoes import limiter, usuario_id_atual
-from modelos.modelos import Aresta, No
+from modelos.modelos import Aresta, ContaCategoria, No
 from servicos.financeiro import CATEGORIAS, gastos_por_categoria
 from servicos.grafos_service import calcular_roteamento_otimizado
 from validacao import VALOR_MAX, corpo_json, erro, numero, texto
@@ -18,6 +20,20 @@ MAX_CONTAS = 20   # mantem o grafo pequeno e a resposta rapida
 
 def _contas_do_usuario(usuario_id):
     return No.query.filter_by(usuario_id=usuario_id, tipo="conta").order_by(No.nome).all()
+
+
+def _categorias_por_conta(usuario_id):
+    """{conta_id: [categorias que ela aceita]}; conta fora do mapa = aceita qualquer categoria"""
+    mapa = defaultdict(list)
+    for linha in ContaCategoria.query.filter_by(usuario_id=usuario_id).all():
+        mapa[linha.conta_id].append(linha.categoria)
+    return {cid: sorted(cats, key=CATEGORIAS.index) for cid, cats in mapa.items()}
+
+
+def _conta_dict(conta, mapa):
+    dados = conta.para_dict()
+    dados["categorias"] = mapa.get(conta.id, [])     # lista vazia = qualquer categoria
+    return dados
 
 
 def _validar_campos(dados, nome_obrigatorio):
@@ -46,13 +62,34 @@ def _validar_campos(dados, nome_obrigatorio):
             return None, "percentual inválido (entre -100 e 100)"
         campos["custo"] = custo
 
+    if "categorias" in dados:
+        # categorias que a conta aceita (ex.: vale-alimentacao -> ["Alimentação"]); vazio/nulo = qualquer uma
+        bruto = dados["categorias"]
+        if bruto is None:
+            bruto = []
+        if not isinstance(bruto, list) or len(bruto) > len(CATEGORIAS):
+            return None, "'categorias' deve ser uma lista de categorias"
+        if any(not isinstance(c, str) or c not in CATEGORIAS for c in bruto):
+            return None, "categoria inválida na lista de categorias aceitas"
+        escolhidas = set(bruto)
+        # marcar todas equivale a nao restringir: assim a conta nao ganha prioridade de vale sem querer
+        campos["categorias"] = [] if escolhidas == set(CATEGORIAS) else sorted(escolhidas, key=CATEGORIAS.index)
+
     return campos, None
+
+
+def _gravar_categorias(usuario_id, conta_id, categorias):
+    ContaCategoria.query.filter_by(usuario_id=usuario_id, conta_id=conta_id).delete(synchronize_session=False)
+    for categoria in categorias:
+        db.session.add(ContaCategoria(usuario_id=usuario_id, conta_id=conta_id, categoria=categoria))
 
 
 @grafos_bp.route("/contas", methods=["GET"])
 @jwt_required()
 def listar_contas():
-    return jsonify([c.para_dict() for c in _contas_do_usuario(usuario_id_atual())])
+    usuario_id = usuario_id_atual()
+    mapa = _categorias_por_conta(usuario_id)
+    return jsonify([_conta_dict(c, mapa) for c in _contas_do_usuario(usuario_id)])
 
 
 @grafos_bp.route("/contas", methods=["POST"])
@@ -81,11 +118,13 @@ def criar_conta():
     )
     db.session.add(nova)
     try:
+        db.session.flush()                      # gera o id da conta para ligar as categorias
+        _gravar_categorias(usuario_id, nova.id, campos.get("categorias", []))
         db.session.commit()
     except IntegrityError:
         db.session.rollback()
         return erro("já existe uma conta com esse nome", 409)
-    return jsonify(nova.para_dict()), 201
+    return jsonify(_conta_dict(nova, _categorias_por_conta(usuario_id))), 201
 
 
 @grafos_bp.route("/contas/<int:conta_id>", methods=["PUT"])
@@ -107,14 +146,17 @@ def editar_conta(conta_id):
         if No.query.filter_by(usuario_id=usuario_id, tipo="conta", nome=campos["nome"]).first():
             return erro("já existe uma conta com esse nome", 409)
 
-    for campo, valor in campos.items():
-        setattr(conta, campo, valor)
+    for campo in ("nome", "capacidade", "custo"):
+        if campo in campos:
+            setattr(conta, campo, campos[campo])
+    if "categorias" in campos:
+        _gravar_categorias(usuario_id, conta.id, campos["categorias"])
     try:
         db.session.commit()
     except IntegrityError:
         db.session.rollback()
         return erro("já existe uma conta com esse nome", 409)
-    return jsonify(conta.para_dict())
+    return jsonify(_conta_dict(conta, _categorias_por_conta(usuario_id)))
 
 
 @grafos_bp.route("/contas/<int:conta_id>", methods=["DELETE"])
@@ -123,7 +165,8 @@ def excluir_conta(conta_id):
     usuario_id = usuario_id_atual()
     conta = No.query.filter_by(id=conta_id, usuario_id=usuario_id, tipo="conta").first_or_404()
 
-    # as parcelas futuras projetadas a partir dessa conta saem junto (a chave estrangeira exige)
+    # as categorias aceitas e as parcelas futuras projetadas a partir dessa conta saem junto (a chave estrangeira exige)
+    ContaCategoria.query.filter_by(usuario_id=usuario_id, conta_id=conta.id).delete(synchronize_session=False)
     Aresta.query.filter_by(usuario_id=usuario_id, origem_id=conta.id).delete(synchronize_session=False)
     db.session.delete(conta)
     db.session.commit()
@@ -133,8 +176,10 @@ def excluir_conta(conta_id):
 # ------------------------------------------------------------------ grafo e otimizacao
 
 def _calcular(usuario_id, despesas):
+    mapa = _categorias_por_conta(usuario_id)
     contas = [
-        {"id": c.id, "nome": c.nome, "capacidade": c.capacidade, "custo": c.custo or 0.0}
+        {"id": c.id, "nome": c.nome, "capacidade": c.capacidade, "custo": c.custo or 0.0,
+         "categorias": mapa.get(c.id, [])}
         for c in _contas_do_usuario(usuario_id)
     ]
     return calcular_roteamento_otimizado(contas, despesas)

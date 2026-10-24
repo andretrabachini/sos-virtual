@@ -46,10 +46,11 @@ const u=usuarioAtual();ola.textContent='Olá, '+((u.nome||'').split(' ')[0]||'be
 // mapa "para onde o dinheiro vai": a melhor forma de pagar as despesas do mês (grafo de fluxo de custo mínimo)
 (async()=>{try{
   const g=await api('/grafo');
-  if(g.status==='sucesso'){
+  if(g.nos){
     grafo.style.cssText='height:auto;border:0;display:block;padding:0';
     desenharGrafo(grafo,g);
-    grafo.insertAdjacentHTML('beforeend','<p class="rot" style="margin-top:.6rem">'+(g.beneficio_total<0?'Custo estimado de juros e taxas: ':'Benefício estimado de cashback: ')+'<b>'+brl(Math.abs(g.beneficio_total))+'</b> · <a href="grafo.html">ver detalhes e simular</a></p>');
+    if(g.status==='gargalo')grafo.insertAdjacentHTML('beforeend','<p class="aviso" style="margin:.8rem 0 0">'+esc(g.mensagem)+' <a href="grafo.html">Ajustar contas</a></p>');
+    else grafo.insertAdjacentHTML('beforeend','<p class="rot" style="margin-top:.6rem">'+(g.beneficio_total<0?'Custo estimado de juros e taxas: ':'Benefício estimado de cashback: ')+'<b>'+brl(Math.abs(g.beneficio_total))+'</b> · <a href="grafo.html">ver detalhes e simular</a></p>');
   }else grafo.innerHTML='<div>'+esc(g.mensagem)+'<br><a href="grafo.html">Cadastrar contas e cartões</a></div>';
 }catch(e){grafo.textContent=msgErro(e);}})();
 
