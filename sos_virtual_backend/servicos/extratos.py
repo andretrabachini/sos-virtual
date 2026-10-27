@@ -224,6 +224,18 @@ def detectar_parcela(descricao):
     return None
 
 
+def limpar_descricao_parcela(descricao):
+    """
+    nome da compra sem o marcador de parcela, para mostrar ao usuario ao lado da coluna "parcela":
+    "TV 55 PARC 02/06" -> "TV 55"; "Notebook (2/10)" -> "Notebook"; datas como 05/10/2026 ficam intactas
+    """
+    base = RE_PARC_PALAVRA.sub(" ", descricao)
+    base = RE_PARC_BARRA.sub(" ", base)
+    base = re.sub(r"\(\s*\)|\[\s*\]", " ", base)               # parenteses vazios que sobraram
+    base = " ".join(base.split()).strip(" -–—:;,.")                 # separadores soltos nas pontas
+    return base or descricao
+
+
 def chave_compra(descricao, total):
     """identifica a mesma compra entre extratos de meses diferentes (descricao sem o marcador de parcela)"""
     base = RE_PARC_PALAVRA.sub(" ", descricao)

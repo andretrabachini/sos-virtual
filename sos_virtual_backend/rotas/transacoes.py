@@ -7,6 +7,7 @@ from flask_jwt_extended import jwt_required
 from database import db
 from extensoes import limiter, usuario_id_atual
 from modelos.modelos import Aresta, No, Transacao
+from servicos.alertas_service import alertas_ultrapassados, fotografar_alertas
 from servicos.categorizacao import detectar_categoria_com_motivo
 from servicos.financeiro import CATEGORIAS
 from validacao import VALOR_MAX, corpo_json, erro, numero, texto
@@ -121,6 +122,8 @@ def criar():
     if categoria == "Salário" and valor < 0:
         return erro(MSG_SALARIO)
 
+    antes = fotografar_alertas(usuario_id) if valor < 0 else None   # so despesas mexem nos alertas
+
     nova = Transacao(
         usuario_id=usuario_id,
         descricao=descricao,
@@ -130,7 +133,9 @@ def criar():
 
     db.session.add(nova)
     db.session.commit()
-    return jsonify(nova.para_dict()), 201
+    resposta = nova.para_dict()
+    resposta["alertas"] = alertas_ultrapassados(usuario_id, antes)   # o front mostra um pop-up com eles
+    return jsonify(resposta), 201
 
 
 @transacoes_bp.route("/<int:transacao_id>", methods=["PUT"])
@@ -167,6 +172,7 @@ def editar(transacao_id):
     if nova_categoria == "Salário" and novo_valor < 0:
         return erro(MSG_SALARIO + " (troque também a categoria)")
 
+    antes = fotografar_alertas(usuario_id)
     categoria_mudou = nova_categoria != t.categoria
     t.descricao, t.valor, t.categoria = nova_descricao, novo_valor, nova_categoria
 
@@ -174,7 +180,9 @@ def editar(transacao_id):
         _mover_projecoes(usuario_id, t.descricao, nova_categoria)
 
     db.session.commit()
-    return jsonify(t.para_dict())
+    resposta = t.para_dict()
+    resposta["alertas"] = alertas_ultrapassados(usuario_id, antes)
+    return jsonify(resposta)
 
 
 @transacoes_bp.route("/<int:transacao_id>", methods=["DELETE"])

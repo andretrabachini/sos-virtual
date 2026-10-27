@@ -24,7 +24,7 @@
     const cats = dados.nos.filter(n => n.tipo === 'categoria');
     const porId = Object.fromEntries(dados.nos.map(n => [n.id, n]));
 
-    const L = 600, X_CONTA = 8, X_CAT = 424, LARG = 168, ALT = 46, PASSO = 66, MARGEM = 14;
+    const L = 600, X_CONTA = 8, X_CAT = 424, LARG = 168, ALT = 42, PASSO = 52, MARGEM = 10;
     const linhas = Math.max(contas.length, cats.length, 1);
     const H = MARGEM * 2 + linhas * PASSO;
     // cada coluna ocupa a altura toda, com os itens bem distribuídos
@@ -70,6 +70,6 @@
 
     const resumo = 'Mapa de pagamentos: ' + contas.length + ' conta(s) pagando ' + cats.length + ' despesa(s). Os detalhes estão na tabela.';
     alvo.innerHTML = '<svg viewBox="0 0 ' + L + ' ' + H + '" role="img" aria-label="' + esc(resumo) +
-      '" style="width:100%;height:auto;display:block" font-family="Figtree,system-ui,sans-serif">' + ligacoes + nosConta + nosCat + '</svg>' + legenda(contas.some(c => c.restrita), cats.some(c => c.faltam > 0));
+      '" style="display:block;width:100%;height:auto;max-height:56vh;margin:0 auto" font-family="Figtree,system-ui,sans-serif">' + ligacoes + nosConta + nosCat + '</svg>' + legenda(contas.some(c => c.restrita), cats.some(c => c.faltam > 0));
   };
 })();

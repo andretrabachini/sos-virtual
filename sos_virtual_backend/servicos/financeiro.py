@@ -10,6 +10,7 @@ from servicos.categorizacao import detectar_categoria  # noqa: F401
 # categorias disponiveis no sistema
 CATEGORIAS = [
     "Alimentação",
+    "Restaurante",
     "Transporte",
     "Saúde",
     "Educação",

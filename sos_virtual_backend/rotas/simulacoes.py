@@ -4,6 +4,7 @@ from flask_jwt_extended import jwt_required
 from database import db
 from extensoes import limiter, usuario_id_atual
 from modelos.modelos import Usuario
+from servicos.alertas_service import alertas_ultrapassados, fotografar_alertas
 from servicos.extratos import ExtratoInvalido, ler_extrato
 from servicos.importacao import importar_lancamentos, projecao_mensal
 from validacao import erro, texto
@@ -61,6 +62,7 @@ def importar_extrato():
         for l in lancamentos:
             l["valor"] = -l["valor"]
 
+    antes = fotografar_alertas(usuario_id)
     try:
         resumo = importar_lancamentos(
             usuario_id,
@@ -74,6 +76,7 @@ def importar_extrato():
         db.session.rollback()
         raise  # o handler de erro 500 do app.py responde sem vazar detalhes
 
+    resumo["alertas"] = alertas_ultrapassados(usuario_id, antes)
     resumo["linhas_com_erro"] = len(erros_leitura)
     resumo["erros"] = erros_leitura[:10]  # mostra so as 10 primeiras para a resposta nao crescer
     return jsonify(resumo), 201

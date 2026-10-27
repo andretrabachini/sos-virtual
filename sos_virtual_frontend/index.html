@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="SOS Virtual: controle gastos, metas e alertas e veja o caminho do seu dinheiro em um grafo.">
+<meta name="description" content="SOS Virtual: controle gastos, parcelas, metas e alertas e veja de qual conta ou vale pagar cada despesa, em vez de manter uma planilha.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230E2A47'/%3E%3Ctext x='16' y='22' font-size='18' font-family='sans-serif' font-weight='700' text-anchor='middle' fill='%23fff'%3ES%3C/text%3E%3C/svg%3E">
 <title>SOS Virtual — o caminho do seu dinheiro</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -19,14 +19,51 @@
 .hero p{color:var(--ink2);font-size:1.12rem;max-width:34rem;margin-bottom:1.8rem}
 .hero .acoes{display:flex;gap:.7rem;flex-wrap:wrap}
 .hero svg{width:100%;height:auto}
+.faixa{max-width:1680px;margin:0 auto;padding:4rem clamp(1.25rem,4vw,4rem)}
+.faixa>h2{font-size:clamp(1.7rem,3vw,2.3rem);margin-bottom:.6rem}
+.faixa>.intro{color:var(--ink2);max-width:46rem;margin-bottom:2rem;font-size:1.05rem}
+.fundo{background:var(--surface);border-block:1px solid var(--line)}
+.so-leitor{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.comparativo{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.comparativo th,.comparativo td{padding:1rem 1.1rem;vertical-align:top;text-align:left;border-bottom:1px solid var(--line)}
+.comparativo thead th{background:var(--bg);font-family:var(--fh);font-size:.95rem}
+.comparativo th[scope=row]{font-weight:600;width:20%}
+.comparativo td:nth-child(2){color:var(--ink2);width:36%}
+.comparativo td:nth-child(3){width:44%}
+.comparativo tr:last-child>*{border-bottom:0}
+.rot-mobile{display:none}
+.comparativo .sim::before{content:"✓ ";color:var(--pos);font-weight:700}
+.comparativo .nao::before{content:"– ";color:var(--ink2)}
+.ganhos{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.ganho{background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:1.4rem}
+.ganho h3{font-size:1.15rem;margin-bottom:.5rem}
+.ganho p{color:var(--ink2)}
+.ganho .exemplo{margin-top:.8rem;padding:.7rem .9rem;border-radius:8px;background:#fff;border:1px dashed var(--line);font-size:.92rem;color:var(--ink)}
+.passos{display:grid;gap:1.2rem;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));counter-reset:passo;list-style:none}
+.passos li{counter-increment:passo;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:1.4rem}
+.passos li::before{content:counter(passo);display:grid;place-items:center;width:2.2rem;height:2.2rem;margin-bottom:.8rem;border-radius:50%;background:var(--brand);color:#fff;font:700 1rem var(--fh)}
+.passos h3{font-size:1.1rem;margin-bottom:.4rem}.passos p{color:var(--ink2)}
 .recursos{background:var(--surface);border-block:1px solid var(--line)}
 .recursos div.in{max-width:1680px;margin:0 auto;padding:3.5rem clamp(1.25rem,4vw,4rem);display:grid;grid-template-columns:1fr 1.4fr;gap:3rem}
 .recursos h2{font-size:2rem}
 .recursos dl div{display:grid;grid-template-columns:11rem 1fr;gap:1rem;padding:1.1rem 0;border-top:1px solid var(--line)}
 .recursos dt{font:700 1.05rem var(--fh)}
 .recursos dd{color:var(--ink2)}
+.final{max-width:1680px;margin:0 auto;padding:4rem clamp(1.25rem,4vw,4rem);text-align:center}
+.final h2{font-size:clamp(1.7rem,3vw,2.3rem);margin-bottom:.6rem}
+.final p{color:var(--ink2);max-width:40rem;margin:0 auto 1.6rem}
+.nota{max-width:1680px;margin:0 auto;padding:0 clamp(1.25rem,4vw,4rem) 1rem;color:var(--ink2);font-size:.85rem}
 footer{max-width:1680px;margin:0 auto;padding:1.75rem clamp(1.25rem,4vw,4rem);color:var(--ink2);font-size:.88rem}
-@media(max-width:820px){.hero,.recursos div.in{grid-template-columns:1fr}.recursos dl div{grid-template-columns:1fr;gap:.2rem}.topo{padding:1rem}}
+@media(max-width:820px){
+  .hero,.recursos div.in{grid-template-columns:1fr}.recursos dl div{grid-template-columns:1fr;gap:.2rem}.topo{padding:1rem}
+  .comparativo thead{display:none}
+  .comparativo,.comparativo tbody,.comparativo tr,.comparativo th,.comparativo td{display:block;width:auto!important}
+  .comparativo tr{padding:.9rem 0;border-bottom:1px solid var(--line)}.comparativo tr:last-child{border-bottom:0}
+  .comparativo th,.comparativo td{border:0;padding:.25rem 1.1rem}
+  .comparativo .sim::before,.comparativo .nao::before{content:none}
+  .rot-mobile{display:block;margin-bottom:.1rem;font-size:.72rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ink2)}
+  .sim .rot-mobile{color:var(--pos)}
+}
 </style>
 </head>
 <body>
@@ -39,10 +76,10 @@ footer{max-width:1680px;margin:0 auto;padding:1.75rem clamp(1.25rem,4vw,4rem);co
 <section class="hero">
   <div>
     <h1>Veja para onde seu dinheiro vai.</h1>
-    <p>O SOS Virtual organiza seus gastos, acompanha suas metas e usa grafos para indicar de qual conta ou cartão vale mais a pena pagar cada despesa.</p>
-    <div class="acoes"><a class="btn" href="cadastro.html">Criar conta grátis</a><a class="btn sec" href="#recursos">Ver o que ele faz</a></div>
+    <p>O SOS Virtual organiza seus gastos, acompanha parcelas e metas, avisa quando você passa do limite e mostra, com grafos, de qual conta, cartão ou vale vale mais a pena pagar cada despesa.</p>
+    <div class="acoes"><a class="btn" href="cadastro.html">Criar conta grátis</a><a class="btn sec" href="#vantagens">Por que não uma planilha?</a></div>
   </div>
-  <!-- o mesmo desenho que o painel vai mostrar: contas → despesas -->
+  <!-- o mesmo desenho que o painel mostra: contas → despesas -->
   <svg viewBox="0 0 480 360" role="img" aria-label="Rede ligando contas e cartões às despesas do mês">
     <g stroke="#1C4A7A" fill="none" stroke-linecap="round">
       <path d="M130 90 C230 90 250 70 350 70" stroke-width="6"/>
@@ -60,17 +97,72 @@ footer{max-width:1680px;margin:0 auto;padding:1.75rem clamp(1.25rem,4vw,4rem);co
   </svg>
 </section>
 
+<section class="fundo" id="vantagens" aria-labelledby="t-vantagens">
+  <div class="faixa">
+    <h2 id="t-vantagens">Por que usar o SOS Virtual em vez de uma planilha?</h2>
+    <p class="intro">Uma planilha guarda números, mas o trabalho de preencher, categorizar, lembrar das parcelas e fazer as contas continua sendo seu. Aqui esse trabalho é do sistema.</p>
+    <table class="comparativo">
+      <caption class="so-leitor">Comparação entre controlar as finanças em uma planilha e no SOS Virtual</caption>
+      <thead><tr><th scope="col">O que você precisa fazer</th><th scope="col">Em uma planilha</th><th scope="col">No SOS Virtual</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">Registrar os gastos</th><td class="nao"><span class="rot-mobile">Em uma planilha</span>Digitar linha por linha ou copiar e colar o extrato do banco, ajustando colunas e formatos.</td><td class="sim"><span class="rot-mobile">No SOS Virtual</span>Enviar o extrato em CSV ou OFX de uma vez. Lançamentos repetidos são ignorados, então você pode reenviar sem medo.</td></tr>
+        <tr><th scope="row">Classificar por categoria</th><td class="nao"><span class="rot-mobile">Em uma planilha</span>Escolher a categoria de cada linha, uma a uma.</td><td class="sim"><span class="rot-mobile">No SOS Virtual</span>A categoria é sugerida pela descrição (supermercado, restaurante, farmácia…) e corrigida com um clique.</td></tr>
+        <tr><th scope="row">Controlar compras parceladas</th><td class="nao"><span class="rot-mobile">Em uma planilha</span>Criar uma fórmula para cada mês e lembrar de atualizar. Parcela esquecida vira susto na fatura.</td><td class="sim"><span class="rot-mobile">No SOS Virtual</span>Informe o número de parcelas e os juros: as parcelas futuras são calculadas e projetadas mês a mês, mostrando quanto da sua renda já está comprometido.</td></tr>
+        <tr><th scope="row">Decidir qual conta usar</th><td class="nao"><span class="rot-mobile">Em uma planilha</span>Fazer as contas de cabeça, comparando cashback, limites e vales.</td><td class="sim"><span class="rot-mobile">No SOS Virtual</span>O otimizador mostra de qual conta, cartão ou vale pagar cada despesa, usando o saldo do vale-alimentação no mercado e o do vale-refeição no restaurante.</td></tr>
+        <tr><th scope="row">Não estourar um limite</th><td class="nao"><span class="rot-mobile">Em uma planilha</span>Lembrar de olhar a célula do total da categoria.</td><td class="sim"><span class="rot-mobile">No SOS Virtual</span>Um aviso aparece na tela na hora em que um gasto passa do limite que você definiu.</td></tr>
+        <tr><th scope="row">Acompanhar metas</th><td class="nao"><span class="rot-mobile">Em uma planilha</span>Montar fórmulas e gráficos de progresso.</td><td class="sim"><span class="rot-mobile">No SOS Virtual</span>Crie a meta, deposite e acompanhe a barra de progresso.</td></tr>
+        <tr><th scope="row">Manter tudo funcionando</th><td class="nao"><span class="rot-mobile">Em uma planilha</span>Consertar fórmulas quebradas e manter versões do arquivo.</td><td class="sim"><span class="rot-mobile">No SOS Virtual</span>Sem fórmulas para manter e sem arquivos soltos: seus dados ficam na sua conta.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="faixa" aria-labelledby="t-ganhos">
+  <h2 id="t-ganhos">O que você ganha usando o sistema</h2>
+  <p class="intro">Menos tempo digitando e conferindo, mais clareza para decidir.</p>
+  <div class="ganhos">
+    <article class="ganho"><h3>Seu tempo de volta</h3><p>Importar o extrato e aceitar as categorias sugeridas substitui copiar, colar e classificar tudo à mão. Você gasta o tempo olhando o resultado, não montando a planilha.</p>
+      <div class="exemplo">Um extrato com 100 lançamentos: na planilha são 100 linhas para tratar; aqui é um envio de arquivo.</div></article>
+    <article class="ganho"><h3>Nenhuma parcela esquecida</h3><p>Cada compra parcelada vira parcelas futuras que aparecem no painel, com a compra, o cartão e o valor de cada mês. Você enxerga o que já está comprometido antes de assumir uma nova dívida.</p></article>
+    <article class="ganho"><h3>Decisões melhores com seu dinheiro</h3><p>O sistema descobre a combinação de contas que mais aproveita cashback e saldos de vales, respeitando o limite e o que cada conta aceita pagar.</p>
+      <div class="exemplo">Exemplo ilustrativo: R$ 3.000 em despesas e um cartão com 2% de cashback e limite de R$ 1.000. Usado do jeito certo, ele devolve R$ 20.</div></article>
+    <article class="ganho"><h3>Aviso na hora certa</h3><p>Defina um limite por categoria e receba um aviso na tela assim que um gasto passar dele, no momento em que ainda dá para mudar o rumo do mês.</p></article>
+    <article class="ganho"><h3>O mês inteiro em uma tela</h3><p>Receitas, despesas, saldo, gastos por categoria, parcelas dos próximos meses e o caminho do dinheiro, sem abrir várias abas.</p></article>
+    <article class="ganho"><h3>Seus dados sob seu controle</h3><p>Senhas protegidas, cada pessoa vê só os próprios dados, e você pode exportar ou excluir tudo, conforme a LGPD. <a href="privacidade.html">Leia a política</a>.</p></article>
+  </div>
+</section>
+
+<section class="fundo" aria-labelledby="t-como">
+  <div class="faixa">
+    <h2 id="t-como">Como funciona</h2>
+    <p class="intro">Em poucos passos você sai do extrato bagunçado para um plano claro.</p>
+    <ol class="passos">
+      <li><h3>Crie sua conta</h3><p>Informe nome, e-mail e senha. Leva menos de um minuto, e é grátis.</p></li>
+      <li><h3>Traga seus gastos</h3><p>Envie o extrato do banco ou da fatura, ou registre à mão, inclusive compras parceladas com juros.</p></li>
+      <li><h3>Cadastre suas contas e vales</h3><p>Informe limite, cashback e o que cada vale pode pagar (alimentação, refeição, transporte).</p></li>
+      <li><h3>Siga o caminho do dinheiro</h3><p>Veja de onde pagar cada despesa e acompanhe parcelas, metas e alertas.</p></li>
+    </ol>
+  </div>
+</section>
+
 <section class="recursos" id="recursos">
   <div class="in">
     <h2>O que você faz por aqui</h2>
     <dl>
-      <div><dt>Painel</dt><dd>Receitas, despesas e saldo do mês, com os gastos separados por categoria.</dd></div>
-      <div><dt>Transações</dt><dd>Registre gastos à mão ou envie o extrato em CSV ou OFX; compras parceladas são projetadas nos meses seguintes.</dd></div>
+      <div><dt>Painel</dt><dd>Receitas, despesas e saldo do mês, gastos por categoria, parcelas dos próximos meses e o mapa de para onde o dinheiro vai.</dd></div>
+      <div><dt>Transações</dt><dd>Registre gastos à mão, à vista ou parcelados (com número de parcelas, juros e cartão), ou envie o extrato em CSV ou OFX. Corrija a categoria direto no histórico.</dd></div>
+      <div><dt>Otimizador</dt><dd>Cadastre contas, cartões e vales e descubra de qual pagar cada despesa para aproveitar cashback e saldos, com o grafo do plano.</dd></div>
       <div><dt>Metas</dt><dd>Defina um valor e um prazo e acompanhe quanto já guardou.</dd></div>
-      <div><dt>Alertas</dt><dd>Defina um limite por categoria e veja quando o gasto passar dele.</dd></div>
+      <div><dt>Alertas</dt><dd>Defina um limite por categoria e receba um aviso na tela quando o gasto passar dele.</dd></div>
       <div><dt>Assistente</dt><dd>Converse sobre suas finanças e registre gastos escrevendo frases como "gastei R$ 50 no mercado".</dd></div>
     </dl>
   </div>
+</section>
+
+<section class="final">
+  <h2>Comece a ver o caminho do seu dinheiro</h2>
+  <p>Crie sua conta e traga seu primeiro extrato. O SOS Virtual é uma ferramenta de apoio e não substitui a orientação de um profissional financeiro.</p>
+  <a class="btn" href="cadastro.html">Criar conta grátis</a>
 </section>
 </main>
 

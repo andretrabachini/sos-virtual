@@ -28,6 +28,7 @@ class Usuario(db.Model):
     nos = db.relationship("No", backref="usuario", lazy=True, cascade="all, delete-orphan")
     redefinicoes = db.relationship("RedefinicaoSenha", backref="usuario", lazy=True, cascade="all, delete-orphan")
     contas_categorias = db.relationship("ContaCategoria", backref="usuario", lazy=True, cascade="all, delete-orphan")
+    parcelamentos = db.relationship("Parcelamento", backref="usuario", lazy=True, cascade="all, delete-orphan")
 
     def para_dict(self):
         return {
@@ -220,3 +221,25 @@ class ContaCategoria(db.Model):
     usuario_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=False, index=True)
     conta_id = db.Column(db.Integer, db.ForeignKey("nos.id"), nullable=False, index=True)
     categoria = db.Column(db.String(80), nullable=False)
+
+
+# tabela de compras parceladas registradas A MAO na tela de transacoes ("parcelei em 10x no cartao X com 2,5% de juros")
+# guarda os detalhes da compra (juros, valor a vista, total); as parcelas em si ficam em transacoes (as ja
+# vencidas) e em arestas (as futuras), ligadas por `grupo`. compras parceladas vindas de extratos nao usam
+# esta tabela: elas sao descritas pelas proprias arestas
+class Parcelamento(db.Model):
+    __tablename__ = "parcelamentos"
+
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=False, index=True)
+    grupo = db.Column(db.String(32), unique=True, nullable=False)     # liga as arestas desta compra (chave_compra = "manual:<grupo>")
+    descricao = db.Column(db.String(255), nullable=False)
+    valor_vista = db.Column(db.Numeric(12, 2, asdecimal=False), nullable=False)    # preco sem juros
+    valor_parcela = db.Column(db.Numeric(12, 2, asdecimal=False), nullable=False)
+    valor_total = db.Column(db.Numeric(12, 2, asdecimal=False), nullable=False)    # soma das parcelas (com juros)
+    numero_parcelas = db.Column(db.Integer, nullable=False)
+    juros_mensal = db.Column(db.Float, default=0.0)                                # % ao mes; 0 = sem juros
+    conta = db.Column(db.String(100), nullable=False)                              # nome do cartao/conta
+    categoria = db.Column(db.String(80), nullable=False)
+    data_inicio = db.Column(db.DateTime, nullable=False)                           # data da primeira parcela
+    criado_em = db.Column(db.DateTime, default=datetime.utcnow)

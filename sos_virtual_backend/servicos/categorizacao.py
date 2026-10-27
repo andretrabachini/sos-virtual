@@ -22,23 +22,28 @@ import unicodedata
 CATEGORIA_PADRAO = "Outros"
 
 # a ordem desempata quando duas categorias casam com a mesma forca
-ORDEM = ["Alimentação", "Transporte", "Saúde", "Educação", "Lazer", "Moradia",
+ORDEM = ["Alimentação", "Restaurante", "Transporte", "Saúde", "Educação", "Lazer", "Moradia",
          "Vestuário", "Investimentos", "Salário", "Outros"]
 
 # categorias que so existem para receitas (valor positivo): nunca sao sugeridas para despesas
 SO_RECEITA = {"Salário"}
 
 REGRAS = {
+    # compras de comida para levar para casa (o que o vale-alimentacao costuma pagar)
     "Alimentação": [
         "mercado", "mercadinho", "mercearia", "supermerc*", "hipermerc*", "minimerc*", "atacadao", "atacarejo",
         "assai", "carrefour", "pao de acucar", "sams club", "makro", "hortifruti", "sacolao", "feira livre", "?feira",
-        "acougue", "acougu*", "padaria", "padari*", "panificadora", "confeitaria", "pastelaria", "pao",
+        "acougue", "acougu*", "padaria", "padari*", "panificadora", "pao", "confeitaria",
+        "adega", "cerveja", "bebida",
+    ],
+    # refeicoes fora de casa e delivery (o que o vale-refeicao costuma pagar)
+    "Restaurante": [
         "restaurante", "restaurant*", "lanchonete", "lanchonet*", "lanche", "pizzaria", "pizzari*", "pizza",
         "hamburgueria", "hamburguer", "burger king", "mcdonald", "mc donald", "subway", "outback", "habib",
-        "giraffas", "spoleto", "china in box", "madero", "sushi", "temaki",
+        "giraffas", "spoleto", "china in box", "madero", "sushi", "temaki", "pastelaria",
         "ifood", "ifd", "rappi", "uber eats", "ubereats", "99 food", "99food",
-        "almoco", "jantar", "cafe", "cafeteria", "starbucks", "sorveteria", "sorvete", "acai", "churrascaria",
-        "churrasco", "marmita", "marmitex", "comida", "bar e restaurante", "adega", "cerveja", "bebida", "?delivery",
+        "almoco", "jantar", "refeicao", "cafeteria", "starbucks", "sorveteria", "sorvete", "acai", "churrascaria",
+        "churrasco", "marmita", "marmitex", "bar e restaurante", "?cafe", "?delivery", "?comida",
     ],
     "Transporte": [
         "uber", "99 pop", "99pop", "99 taxi", "99taxi", "99app", "99 app", "99 tecnologia", "cabify", "indrive",

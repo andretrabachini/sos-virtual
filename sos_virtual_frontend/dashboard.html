@@ -7,7 +7,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/estilo.css">
-<title>Painel — SOS Virtual</title></head>
+<title>Painel — SOS Virtual</title>
+<style>.mes-parc{margin-bottom:.9rem}.mes-parc summary{cursor:pointer;list-style:none;border-radius:var(--r)}.mes-parc summary::-webkit-details-marker{display:none}.seta{display:inline-block;width:1rem;color:var(--ink2)}.mes-parc[open] .seta{transform:rotate(90deg)}.mes-parc .tabela-rolavel{overflow-x:auto;margin:.2rem 0 .6rem;padding:.2rem .8rem;background:var(--bg);border-radius:var(--r)}.selo{display:inline-block;padding:.05rem .5rem;border-radius:99px;background:#fff;border:1px solid var(--line);color:var(--ink2);font-size:.75rem;font-weight:600;white-space:nowrap}</style></head>
 <body data-pagina="dashboard">
 <div class="app"><aside id="menu"></aside>
 <main class="conteudo">
@@ -54,17 +55,23 @@ const u=usuarioAtual();ola.textContent='Olá, '+((u.nome||'').split(' ')[0]||'be
   }else grafo.innerHTML='<div>'+esc(g.mensagem)+'<br><a href="grafo.html">Cadastrar contas e cartões</a></div>';
 }catch(e){grafo.textContent=msgErro(e);}})();
 
-// projeção das parcelas futuras (vem das arestas criadas na importação de extratos)
+// projeção das parcelas futuras: cada mês abre e mostra de quais compras vem o valor
 (async()=>{try{
   const p=await api('/simulacoes/projecao?meses=6');
   const total=p.meses.reduce((s,x)=>s+x.comprometido,0);
-  if(!total){proj.innerHTML='<p class="vazio">Nenhuma parcela futura registrada. Importe um extrato com compras parceladas em Transações.</p>';return;}
+  if(!total){proj.innerHTML='<p class="vazio">Nenhuma parcela futura registrada. Registre uma compra parcelada ou importe um extrato com compras parceladas em <a href="transacoes.html#parcelas">Transações</a>.</p>';return;}
   const renda=p.renda_mensal,maior=Math.max(...p.meses.map(x=>x.comprometido));
-  proj.innerHTML=p.meses.map(x=>{
+  const linhas=x=>{
     const [ano,mm]=x.mes.split('-'),nome=new Date(ano,mm-1).toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
     const pct=renda?Math.min(x.comprometido/renda*100,100):x.comprometido/maior*100;
     const neg=x.saldo_livre!==null&&x.saldo_livre<0;
-    return '<div class="linha"><span>'+nome+'</span><span><b>'+brl(x.comprometido)+'</b>'+(x.saldo_livre!==null?' <span class="rot">· '+(neg?'faltam '+brl(-x.saldo_livre):'sobra '+brl(x.saldo_livre))+'</span>':'')+'</span></div><div class="barra'+(neg?' perigo':'')+'"><i style="width:'+pct+'%"></i></div>';
-  }).join('')+(renda?'<p class="rot">A barra mostra quanto da sua renda mensal já está comprometido por parcelas.</p>':'<p class="rot">Informe sua renda mensal no cadastro para ver quanto sobra livre em cada mês.</p>');
+    const resumo='<div class="linha"><span><span class="seta" aria-hidden="true">'+(x.itens.length?'▸':'')+'</span>'+nome+(x.itens.length?' <span class="rot">· '+x.itens.length+(x.itens.length===1?' parcela':' parcelas')+'</span>':'')+'</span><span><b>'+brl(x.comprometido)+'</b>'+(x.saldo_livre!==null?' <span class="rot">· '+(neg?'faltam '+brl(-x.saldo_livre):'sobra '+brl(x.saldo_livre))+'</span>':'')+'</span></div><div class="barra'+(neg?' perigo':'')+'" style="margin-bottom:.3rem"><i style="width:'+pct+'%"></i></div>';
+    if(!x.itens.length)return '<div class="mes-parc">'+resumo+'</div>';
+    return '<details class="mes-parc"><summary>'+resumo+'</summary><div class="tabela-rolavel"><table><thead><tr><th>Compra</th><th>Parcela</th><th>Cartão ou conta</th><th>Valor</th><th>Origem</th></tr></thead><tbody>'+
+      x.itens.map(i=>'<tr><td>'+esc(i.descricao)+'<div class="rot">'+esc(i.categoria)+' · vence em '+new Date(i.data+'T12:00').toLocaleDateString('pt-BR')+'</div></td><td>'+esc(i.parcela)+'</td><td>'+esc(i.conta)+'</td><td>'+brl(i.valor)+'</td><td><span class="selo">'+(i.origem==='manual'?'cadastrada por você':'do extrato')+'</span></td></tr>').join('')+'</tbody></table></div></details>';
+  };
+  proj.innerHTML='<p class="rot" style="margin-bottom:1rem">Parcelas que ainda vão vencer. Vêm das compras parceladas que você registrou em Transações e das reconhecidas nos extratos importados (ex.: "PARC 02/05"). Clique em um mês para ver quais compras formam o valor.</p>'+
+    p.meses.map(linhas).join('')+
+    '<p class="rot">'+(renda?'A barra mostra quanto da sua renda mensal já está comprometido por parcelas. ':'Informe sua renda mensal no cadastro para ver quanto sobra livre em cada mês. ')+'<a href="transacoes.html#parcelas">Gerenciar compras parceladas</a></p>';
 }catch(e){proj.innerHTML='<p class="vazio">'+esc(msgErro(e))+'</p>';}})();
 </script></body></html>

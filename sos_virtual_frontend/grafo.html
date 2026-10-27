@@ -8,7 +8,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/estilo.css">
 <title>Otimizador — SOS Virtual</title>
-<style>.catgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(10.5rem,1fr));gap:.5rem 1rem;margin-top:.7rem}.catgrid label{display:flex;gap:.5rem;align-items:center;font-size:.9rem;color:var(--ink)}.catgrid input{accent-color:var(--brand)}.presets{display:flex;gap:.5rem;flex-wrap:wrap}</style></head>
+<style>.catgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(10.5rem,1fr));gap:.5rem 1rem;margin-top:.7rem}.catgrid label{display:flex;gap:.5rem;align-items:center;font-size:.9rem;color:var(--ink)}.catgrid input{accent-color:var(--brand)}.presets{display:flex;gap:.5rem;flex-wrap:wrap}
+.res-duas{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:1.5rem;align-items:start}
+@media(max-width:1100px){.res-duas{grid-template-columns:1fr}}</style></head>
 <body data-pagina="otimizador">
 <div class="app"><aside id="menu"></aside>
 <main class="conteudo">
@@ -23,8 +25,8 @@
       <div class="campo"><label for="cpct">Percentual (%)</label><input type="number" id="cpct" step="0.01" min="0" max="100" placeholder="0"></div>
       <fieldset style="grid-column:1/-1;border:0;padding:0;margin:0 0 1rem">
         <legend style="font-weight:600;font-size:.9rem;margin-bottom:.3rem">Categorias que esta conta pode pagar</legend>
-        <p class="rot" style="margin-bottom:.6rem">Deixe tudo desmarcado para uma conta comum, que paga qualquer categoria. Marque só algumas para um <b>vale</b>: ele paga apenas essas categorias e é usado primeiro nelas, porque o saldo não serve para o resto.</p>
-        <div class="presets"><button type="button" class="btn sec peq" data-preset="Alimentação">Vale alimentação / refeição</button><button type="button" class="btn sec peq" data-preset="Transporte">Vale transporte</button><button type="button" class="btn sec peq" data-preset="">Qualquer categoria</button></div>
+        <p class="rot" style="margin-bottom:.6rem">Deixe tudo desmarcado para uma conta comum, que paga qualquer categoria. Marque só algumas para um <b>vale</b>: ele paga apenas essas categorias e é usado primeiro nelas, porque o saldo não serve para o resto. O vale-alimentação paga <b>Alimentação</b> (mercado, padaria, açougue) e o vale-refeição paga <b>Restaurante</b> (restaurantes, lanchonetes, delivery).</p>
+        <div class="presets"><button type="button" class="btn sec peq" data-preset="Alimentação">Vale alimentação (mercado)</button><button type="button" class="btn sec peq" data-preset="Restaurante">Vale refeição (restaurante)</button><button type="button" class="btn sec peq" data-preset="Transporte">Vale transporte</button><button type="button" class="btn sec peq" data-preset="">Qualquer categoria</button></div>
         <div class="catgrid" id="catbox"></div>
       </fieldset>
       <div class="campo"><button class="btn" id="btnconta" type="submit" style="width:100%">Adicionar conta</button></div>
@@ -44,7 +46,7 @@
 <script src="js/app.js"></script>
 <script src="js/grafo_visualizador.js"></script>
 <script>
-const CATS=['Alimentação','Transporte','Saúde','Educação','Lazer','Moradia','Vestuário','Investimentos','Outros'];
+const CATS=['Alimentação','Restaurante','Transporte','Saúde','Educação','Lazer','Moradia','Vestuário','Investimentos','Outros'];
 let minhasContas=[],editando=null;
 const pctTxt=v=>Math.abs(v).toLocaleString('pt-BR',{maximumFractionDigits:2})+'%';
 const efeitoTxt=v=>v>0?'<span class="pos">+'+brl(v)+'</span>':v<0?'<span class="neg">−'+brl(-v)+'</span>':'<span class="rot">—</span>';
@@ -75,9 +77,9 @@ function mostrar(r){
     '<div class="grid"><div class="painel"><div class="rot">Total a pagar</div><div class="num">'+brl(r.total_despesas)+'</div></div>'+
     (gargalo?'<div class="painel"><div class="rot">Sem conta para pagar</div><div class="num neg">'+brl(r.falta)+'</div></div>':'')+
     '<div class="painel"><div class="rot">'+(b<0?'Custo líquido (juros e taxas)':'Benefício líquido (cashback)')+'</div><div class="num '+(b<0?'neg':'pos')+'">'+brl(Math.abs(b))+'</div></div></div>'+
-    '<div id="grafo-svg"></div><h3 style="margin:1.4rem 0 .5rem">'+(gargalo?'O que dá para pagar':'Como pagar')+'</h3>'+
+    '<div class="res-duas"><div><div id="grafo-svg"></div></div><div><h3 style="margin:0 0 .5rem">'+(gargalo?'O que dá para pagar':'Como pagar')+'</h3>'+
     (r.plano.length?'<table><thead><tr><th>Conta</th><th>Despesa</th><th>Valor</th><th>Efeito</th></tr></thead><tbody>'+
-    r.plano.map(p=>'<tr><td>'+esc(p.conta)+'</td><td>'+esc(p.categoria)+'</td><td>'+brl(p.valor)+'</td><td>'+efeitoTxt(p.efeito)+'</td></tr>').join('')+'</tbody></table>':'<p class="vazio">Nenhuma conta consegue pagar essas despesas.</p>')+
+    r.plano.map(p=>'<tr><td>'+esc(p.conta)+'</td><td>'+esc(p.categoria)+'</td><td>'+brl(p.valor)+'</td><td>'+efeitoTxt(p.efeito)+'</td></tr>').join('')+'</tbody></table>':'<p class="vazio">Nenhuma conta consegue pagar essas despesas.</p>')+'</div></div>'+
     '<p class="rot" style="margin-top:.8rem">Efeito: verde é cashback ganho; vermelho é juros ou taxa paga. O cálculo escolhe a combinação que mais economiza respeitando o limite e as categorias de cada conta. Contas restritas (vales) são usadas primeiro nas categorias que aceitam.</p>';
   desenharGrafo(document.getElementById('grafo-svg'),r);
 }
@@ -97,7 +99,8 @@ formconta.addEventListener('submit',async e=>{e.preventDefault();aviso('msg');
     limpar();await carregarContas();calcular();
   }catch(err){aviso('msg',msgErro(err),'erro');}});
 cancelar.addEventListener('click',limpar);
-catbox.innerHTML=CATS.map(c=>'<label><input type="checkbox" data-c="'+c+'"> '+c+'</label>').join('');
+const DICAS={'Alimentação':'mercado, padaria','Restaurante':'refeições, delivery'};
+catbox.innerHTML=CATS.map(c=>'<label><input type="checkbox" data-c="'+c+'"> '+c+(DICAS[c]?' <span class="rot">('+DICAS[c]+')</span>':'')+'</label>').join('');
 document.querySelector('.presets').addEventListener('click',e=>{if(e.target.dataset.preset===undefined)return;marcar(e.target.dataset.preset?[e.target.dataset.preset]:[]);});
 listac.addEventListener('click',async e=>{const t=e.target.dataset;
   try{

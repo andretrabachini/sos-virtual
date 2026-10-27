@@ -11,7 +11,7 @@ from servicos.categorizacao import (
     CATEGORIA_PADRAO, REGRAS, SO_RECEITA, detectar_categoria, detectar_categoria_com_motivo, normalizar,
 )
 
-CATEGORIAS_DO_SISTEMA = {"Alimentação", "Transporte", "Saúde", "Educação", "Lazer", "Moradia",
+CATEGORIAS_DO_SISTEMA = {"Alimentação", "Restaurante", "Transporte", "Saúde", "Educação", "Lazer", "Moradia",
                          "Vestuário", "Investimentos", "Outros"}
 
 
@@ -23,9 +23,9 @@ def cat(texto, valor=-10):
 @pytest.mark.parametrize("texto,esperado", [
     ("Farmácia São Paulo", "Saúde"), ("FARMACIA SAO JOAO", "Saúde"), ("farmácia", "Saúde"),
     ("Farma\u0301cia", "Saúde"),                       # acento "solto" (letra + acento separado)
-    ("Café da manhã", "Alimentação"), ("CAFE", "Alimentação"),
+    ("Café da manhã", "Restaurante"), ("CAFE", "Restaurante"),
     ("Tênis novo", "Vestuário"), ("TENIS", "Vestuário"),
-    ("Conta de ÁGUA", "Moradia"), ("Almoço", "Alimentação"),
+    ("Conta de ÁGUA", "Moradia"), ("Almoço", "Restaurante"),
     ("ＵＢＥＲ ＴＲＩＰ", "Transporte"),               # letras de largura total
     ("Uber\u200b", "Transporte"),                     # caractere invisivel colado na palavra
 ])
@@ -34,8 +34,8 @@ def test_acentos_maiusculas_e_caracteres_especiais(texto, esperado):
 
 
 @pytest.mark.parametrize("texto,esperado", [
-    ("UBER *TRIP", "Transporte"), ("UBER* TRIP", "Transporte"), ("IFD*PIZZARIA DO ZE", "Alimentação"),
-    ("PAG*PADARIA SANTA", "Alimentação"), ("iFood*Restaurante", "Alimentação"),
+    ("UBER *TRIP", "Transporte"), ("UBER* TRIP", "Transporte"), ("IFD*PIZZARIA DO ZE", "Restaurante"),
+    ("PAG*PADARIA SANTA", "Alimentação"), ("iFood*Restaurante", "Restaurante"),
     ("COMPRA CARTAO 1234 MERCADO 05/10", "Alimentação"), ("PIX ENVIADO JOAO", "Outros"),
     ("NETFLIX.COM", "Lazer"), ("SPOTIFY AB", "Lazer"), ("PARC 02/05 TENIS", "Vestuário"),
     ("DEB AUT CPFL ENERGIA", "Moradia"), ("SABESP-CONTA", "Moradia"),
@@ -60,7 +60,7 @@ def test_gasolina_nao_vira_moradia_por_causa_de_gas():
 
 
 @pytest.mark.parametrize("texto,esperado", [
-    ("Restaurantes", "Alimentação"), ("Farmácias", "Saúde"), ("Mercados", "Alimentação"),
+    ("Restaurantes", "Restaurante"), ("Farmácias", "Saúde"), ("Mercados", "Alimentação"),
     ("Cursos online", "Educação"), ("Ingressos show", "Lazer"), ("Táxis", "Transporte"), ("Pedágios", "Transporte"),
 ])
 def test_plural_simples(texto, esperado):
@@ -69,15 +69,32 @@ def test_plural_simples(texto, esperado):
 
 @pytest.mark.parametrize("texto,esperado", [
     ("SUPERMERC BOM PRECO", "Alimentação"), ("HIPERMERCADO EXTRA", "Alimentação"), ("SUPERMERCADO", "Alimentação"),
-    ("DROGARIA SAO PAULO", "Saúde"), ("DROGARI", "Saúde"), ("RESTAURANT DO ZE", "Alimentação"),
+    ("DROGARIA SAO PAULO", "Saúde"), ("DROGARI", "Saúde"), ("RESTAURANT DO ZE", "Restaurante"),
 ])
 def test_nomes_compostos_e_abreviados_pelo_banco(texto, esperado):
     assert cat(texto) == esperado
 
 
+# ------------------------------- mercado x restaurante (vale-alimentacao x vale-refeicao)
+@pytest.mark.parametrize("texto,esperado", [
+    ("Supermercado Bom Preço", "Alimentação"), ("Carrefour", "Alimentação"), ("Padaria Pão Quente", "Alimentação"),
+    ("Açougue do Zé", "Alimentação"), ("Hortifruti", "Alimentação"), ("Atacadão", "Alimentação"),
+    ("Restaurante Sabor", "Restaurante"), ("McDonald's", "Restaurante"), ("Lanchonete da esquina", "Restaurante"),
+    ("iFood pedido", "Restaurante"), ("Rappi", "Restaurante"), ("Pizzaria", "Restaurante"), ("Starbucks", "Restaurante"),
+    ("Almoço executivo", "Restaurante"), ("Marmita", "Restaurante"), ("Comida japonesa", "Restaurante"),
+])
+def test_mercado_e_restaurante_sao_categorias_separadas(texto, esperado):
+    assert cat(texto) == esperado
+
+
+def test_restaurante_existe_como_categoria_do_sistema():
+    from servicos.financeiro import CATEGORIAS
+    assert "Restaurante" in CATEGORIAS and "Alimentação" in CATEGORIAS
+
+
 # --------------------------------------------------------------- prioridade
 @pytest.mark.parametrize("texto,esperado", [
-    ("Uber Eats almoço", "Alimentação"), ("UBEREATS", "Alimentação"), ("99 Food", "Alimentação"),
+    ("Uber Eats almoço", "Restaurante"), ("UBEREATS", "Restaurante"), ("99 Food", "Restaurante"),
     ("99 Pop corrida", "Transporte"), ("Uber viagem", "Transporte"), ("Viagem para Santos", "Lazer"),
     ("Posto de saúde", "Saúde"), ("Posto Shell", "Transporte"), ("Posto", "Transporte"),
     ("Aluguel de carro", "Transporte"), ("Aluguel apartamento", "Moradia"),
@@ -87,7 +104,7 @@ def test_nomes_compostos_e_abreviados_pelo_banco(texto, esperado):
     ("Mensalidade", "Educação"), ("Mensalidade plano de saúde", "Saúde"),
     ("Clínica veterinária", "Outros"), ("Pet shop", "Outros"), ("Clínica", "Saúde"),
     ("Amazon Prime", "Lazer"), ("Amazon", "Outros"),
-    ("Restaurante no hotel", "Alimentação"), ("Bar e restaurante", "Alimentação"), ("Bar do Zé", "Lazer"),
+    ("Restaurante no hotel", "Restaurante"), ("Bar e restaurante", "Restaurante"), ("Bar do Zé", "Lazer"),
 ])
 def test_prioridade_pela_palavra_mais_especifica(texto, esperado):
     assert cat(texto) == esperado
@@ -148,7 +165,7 @@ def test_valor_invalido_e_tratado_como_despesa():
 
 def test_motivo_informa_a_palavra_que_decidiu():
     assert detectar_categoria_com_motivo("Compra no SUPERMERCADO Bom Preço", -50) == ("Alimentação", "supermerc")
-    assert detectar_categoria_com_motivo("Uber Eats", -50) == ("Alimentação", "uber eats")
+    assert detectar_categoria_com_motivo("Uber Eats", -50) == ("Restaurante", "uber eats")
     assert detectar_categoria_com_motivo("coisa qualquer", -50) == ("Outros", None)
     assert detectar_categoria_com_motivo("", -50) == ("Outros", None)
 

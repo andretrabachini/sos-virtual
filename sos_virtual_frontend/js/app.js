@@ -70,3 +70,56 @@ function aviso(id, texto, tipo) {
   el.textContent = texto;
   el.hidden = false;
 }
+
+// Pop-up de alerta de gastos. Chame com a lista "alertas" que a API devolve ao registrar uma despesa:
+//   mostrarAlertas(resposta.alertas)   (não faz nada se a lista estiver vazia)
+// Fecha com o botão, com Esc ou clicando fora; o foco volta para onde estava.
+function mostrarAlertas(lista) {
+  if (!Array.isArray(lista) || !lista.length) return;
+  if (!document.getElementById('estilo-alerta')) {
+    const st = document.createElement('style');
+    st.id = 'estilo-alerta';
+    st.textContent = `
+      .alerta-fundo{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:1rem;background:rgba(14,42,71,.55)}
+      .alerta-caixa{width:100%;max-width:30rem;max-height:90vh;overflow:auto;padding:1.6rem;border-radius:14px;background:#fff;box-shadow:0 20px 60px rgba(14,42,71,.35)}
+      .alerta-icone{display:grid;place-items:center;width:2.8rem;height:2.8rem;margin-bottom:.8rem;border-radius:50%;background:#FDECEF;color:var(--neg,#D2415A);font:800 1.5rem var(--fh,sans-serif)}
+      .alerta-caixa h2{font-size:1.25rem;margin-bottom:1rem}
+      .alerta-item{padding:.9rem 0;border-top:1px solid var(--line,#DDE5ED)}
+      .alerta-item>b{font-size:1.05rem}.alerta-item>span{margin-left:.5rem;color:var(--ink2,#52667E);font-size:.88rem}
+      .alerta-item .barra{margin:.5rem 0 .4rem}
+      .alerta-acoes{display:flex;gap:.6rem;justify-content:flex-end;flex-wrap:wrap;margin-top:1.2rem}`;
+    document.head.appendChild(st);
+  }
+  const antigo = document.querySelector('.alerta-fundo');
+  if (antigo) antigo.remove();
+
+  const voltarPara = document.activeElement;
+  const fundo = document.createElement('div');
+  fundo.className = 'alerta-fundo';
+  const plural = lista.length > 1;
+  fundo.innerHTML =
+    '<div class="alerta-caixa" role="alertdialog" aria-modal="true" aria-labelledby="alerta-titulo" aria-describedby="alerta-corpo">' +
+    '<div class="alerta-icone" aria-hidden="true">!</div>' +
+    '<h2 id="alerta-titulo">' + (plural ? 'Você ultrapassou ' + lista.length + ' limites de gasto' : 'Você ultrapassou o limite de gasto') + '</h2>' +
+    '<div id="alerta-corpo">' + lista.map(a =>
+      '<div class="alerta-item"><b>' + esc(a.categoria) + '</b><span>' + (a.cruzou ? 'passou do limite deste mês' : 'continua acima do limite') + '</span>' +
+      '<div class="barra perigo"><i style="width:100%"></i></div>' +
+      '<div class="linha"><span>Gasto: <b>' + brl(a.gasto) + '</b></span><span>Limite: ' + brl(a.limite) + '</span></div>' +
+      '<div class="neg">' + (a.excesso > 0 ? brl(a.excesso) + ' acima do limite' : 'Chegou exatamente ao limite') + '</div></div>').join('') + '</div>' +
+    '<div class="alerta-acoes"><a class="btn sec" href="alertas.html">Ver alertas</a><button type="button" class="btn" id="alerta-ok">Entendi</button></div></div>';
+  document.body.appendChild(fundo);
+
+  const fechar = () => { document.removeEventListener('keydown', teclado); fundo.remove(); if (voltarPara && voltarPara.focus) voltarPara.focus(); };
+  const teclado = e => {
+    if (e.key === 'Escape') return fechar();
+    if (e.key !== 'Tab') return;
+    const itens = [...fundo.querySelectorAll('a,button')];            // mantém o Tab dentro do pop-up
+    const primeiro = itens[0], ultimo = itens[itens.length - 1];
+    if (e.shiftKey && document.activeElement === primeiro) { e.preventDefault(); ultimo.focus(); }
+    else if (!e.shiftKey && document.activeElement === ultimo) { e.preventDefault(); primeiro.focus(); }
+  };
+  document.addEventListener('keydown', teclado);
+  fundo.addEventListener('click', e => { if (e.target === fundo) fechar(); });
+  document.getElementById('alerta-ok').addEventListener('click', fechar);
+  document.getElementById('alerta-ok').focus();
+}

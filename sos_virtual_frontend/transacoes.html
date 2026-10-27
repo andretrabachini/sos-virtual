@@ -16,6 +16,8 @@
 #resimp ul{margin:.4rem 0 .4rem 1.2rem}
 .cat-sel{max-width:11.5rem;padding:.3rem .5rem;border:1.5px solid var(--line);border-radius:var(--r);background:#fff;color:var(--ink);font:inherit;font-size:.88rem}
 #sugestao{min-height:1.3rem;font-size:.88rem}
+.selo{display:inline-block;margin-left:.4rem;padding:.05rem .5rem;border-radius:99px;background:var(--bg);border:1px solid var(--line);color:var(--ink2);font-size:.75rem;font-weight:600;white-space:nowrap}
+.tabela-rolavel{overflow-x:auto}
 </style></head>
 <body data-pagina="transacoes">
 <div class="app"><aside id="menu"></aside>
@@ -31,11 +33,23 @@
     <form id="form" class="form-grid">
       <div class="campo larga"><label for="descricao">Descrição</label><input id="descricao" placeholder="Ex.: mercado, salário, Netflix" required></div>
       <div class="campo larga" style="margin:-.4rem 0 .8rem"><div class="rot" id="sugestao" aria-live="polite"></div></div>
-      <div class="campo"><label for="valor">Valor (R$)</label><input type="number" id="valor" step="0.01" min="0.01" required></div>
+      <div class="campo"><label for="valor" id="rotvalor">Valor (R$)</label><input type="number" id="valor" step="0.01" min="0.01" required></div>
       <div class="campo"><label for="tipo">Tipo</label><select id="tipo"><option value="despesa">Despesa</option><option value="receita">Receita</option></select></div>
+      <div class="campo" id="boxforma"><label for="forma">Forma de pagamento</label><select id="forma"><option value="vista">À vista</option><option value="parcelado">Parcelado</option></select></div>
       <div class="campo"><label for="categoria">Categoria</label><select id="categoria"></select></div>
+      <div id="boxparc" style="grid-column:1/-1" hidden>
+        <div class="form-grid">
+          <div class="campo"><label for="pparc">Número de parcelas</label><input type="number" id="pparc" min="2" max="36" step="1" placeholder="Ex.: 10"></div>
+          <div class="campo"><label for="pjuros">Juros ao mês (%)</label><input type="number" id="pjuros" min="0" max="30" step="0.01" placeholder="0 = sem juros"></div>
+          <div class="campo"><label for="pconta">Cartão ou conta</label><input id="pconta" list="contasdl" maxlength="100" value="Conta Principal" autocomplete="off"><datalist id="contasdl"></datalist></div>
+          <div class="campo"><label for="pdata">Data da 1ª parcela</label><input type="date" id="pdata"></div>
+        </div>
+        <div class="rot" id="previaparc" aria-live="polite" style="margin:-.3rem 0 1rem"></div>
+        <p class="rot" style="margin:0 0 1rem">A 1ª parcela entra nas transações do mês. As seguintes aparecem como parcelas futuras no painel, uma por mês.</p>
+      </div>
       <div class="campo"><button class="btn" type="submit" style="width:100%">Registrar</button></div>
     </form>
+    <div id="resparc" class="aviso" hidden role="status" style="margin:1rem 0 0"></div>
   </section>
   <section class="painel"><h2>Importar extrato</h2>
     <p class="rot" style="margin-bottom:1rem">Envie o extrato do banco ou a fatura do cartão em CSV ou OFX (até 2 MB). Compras parceladas, como "PARC 02/05", são reconhecidas e as parcelas futuras aparecem na projeção do painel. O arquivo é lido na hora e não fica guardado: só os lançamentos entram no sistema.</p>
@@ -51,6 +65,10 @@
     </form>
     <div id="resimp" class="aviso" hidden role="status" style="margin:1rem 0 0"></div>
   </section>
+  <section class="painel" id="parcelas"><h2>Compras parceladas em andamento</h2>
+    <p class="rot" style="margin-bottom:1rem">Compras que ainda têm parcelas a vencer: as que você registrou aqui (parcelado) e as reconhecidas nos extratos importados (ex.: "PARC 02/05"). São elas que formam a projeção de parcelas do painel.</p>
+    <div class="tabela-rolavel"><table><thead><tr><th>Compra</th><th>Cartão ou conta</th><th>Parcelas</th><th>Valor da parcela</th><th>Falta pagar</th><th>Próxima</th><th></th></tr></thead><tbody id="listaparc"></tbody></table></div>
+  </section>
   <section class="painel"><div class="filtro"><h2>Histórico</h2><label class="rot">Mês <input type="month" id="mesf"></label></div>
     <table><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th><th></th></tr></thead><tbody id="tb"></tbody></table>
   </section>
@@ -58,8 +76,8 @@
 <script src="js/app.js"></script>
 <script>
 // "Salário" só existe para receitas; as demais categorias valem para os dois tipos
-const CATS_DESP=['Alimentação','Transporte','Saúde','Educação','Lazer','Moradia','Vestuário','Investimentos','Outros'];
-const CATS_REC=['Alimentação','Transporte','Saúde','Educação','Lazer','Moradia','Vestuário','Investimentos','Salário','Outros'];
+const CATS_DESP=['Alimentação','Restaurante','Transporte','Saúde','Educação','Lazer','Moradia','Vestuário','Investimentos','Outros'];
+const CATS_REC=['Alimentação','Restaurante','Transporte','Saúde','Educação','Lazer','Moradia','Vestuário','Investimentos','Salário','Outros'];
 const catsDo=valor=>valor>0?CATS_REC:CATS_DESP;
 // formulário: troca a lista ao mudar o tipo e mantém a escolha se ela ainda for válida
 function montarCategorias(){const atual=categoria.value,lista=catsDo(tipo.value==='receita'?1:-1);
@@ -89,12 +107,53 @@ async function carregar(){try{
   rec.textContent=brl(r);des.textContent=brl(d);sal.textContent=brl(r-d);sal.className='num '+(r-d<0?'neg':'pos');
   tb.innerHTML=l.length?l.map(t=>'<tr><td>'+new Date(t.data).toLocaleDateString('pt-BR')+'</td><td>'+esc(t.descricao)+'</td><td><select class="cat-sel" data-cat-id="'+t.id+'" aria-label="Categoria de '+esc(t.descricao)+'">'+optsLinha(catsDo(t.valor),t.categoria)+'</select></td><td class="'+(t.valor>0?'pos':'neg')+'">'+(t.valor>0?'+':'−')+brl(Math.abs(t.valor))+'</td><td><button class="btn perigo peq" data-del="'+t.id+'">Excluir</button></td></tr>').join(''):'<tr><td colspan="5" class="vazio">Nenhuma transação neste mês.</td></tr>';
 }catch(e){aviso('msg',msgErro(e),'erro');}}
+// ---------- compra parcelada: forma de pagamento, prévia e envio ----------
+const hojeISO=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
+function atualizarForma(){
+  const rec=tipo.value==='receita';
+  boxforma.hidden=rec;if(rec)forma.value='vista';
+  const parc=!rec&&forma.value==='parcelado';
+  boxparc.hidden=!parc;pparc.required=parc;
+  rotvalor.textContent=parc?'Valor da compra à vista (R$)':'Valor (R$)';
+  previa();
+}
+let tPrev=null,seqPrev=0;
+function previa(){
+  clearTimeout(tPrev);seqPrev++;
+  previaparc.textContent='';
+  if(boxparc.hidden)return;
+  const v=parseFloat(valor.value),n=parseInt(pparc.value,10),j=parseFloat(pjuros.value)||0;
+  if(!(v>0)||!(n>=2))return;
+  tPrev=setTimeout(async()=>{const minha=++seqPrev;
+    try{const r=await api('/parcelamentos/simular',{method:'POST',body:JSON.stringify({valor_vista:v,parcelas:n,juros_mensal:j})});
+      if(minha!==seqPrev)return;
+      previaparc.innerHTML='<b>'+n+'x de '+brl(r.valor_parcela)+'</b>'+(r.ultima_parcela!==r.valor_parcela?' (a última de '+brl(r.ultima_parcela)+')':'')+
+        ' · total '+brl(r.valor_total)+(r.juros_total>0?' · juros de <b class="neg">'+brl(r.juros_total)+'</b>':' · sem juros');
+    }catch(e){if(minha===seqPrev)previaparc.textContent=e instanceof TypeError?'':e.message;}},350);
+}
+function restaurarForm(){montarCategorias();sugerir();pdata.value=hojeISO();atualizarForma();}
+[valor,pparc,pjuros].forEach(el=>el.addEventListener('input',previa));
+forma.addEventListener('change',atualizarForma);
+tipo.addEventListener('change',atualizarForma);
+
+function resumoParc(r){
+  resparc.innerHTML='<b>Compra registrada:</b> '+esc(r.descricao)+' em '+r.numero_parcelas+'x de '+brl(r.valor_parcela)+' no '+esc(r.conta)+' ('+(r.juros_total>0?'total de '+brl(r.valor_total)+', com '+brl(r.juros_total)+' de juros':'sem juros')+'). '+
+    (r.lancadas?r.lancadas+' parcela(s) já entrou(ram) nas transações; ':'')+(r.projetadas?r.projetadas+' parcela(s) futura(s) aparece(m) no painel, de '+new Date(r.primeira_data+'T12:00').toLocaleDateString('pt-BR')+' até '+new Date(r.ultima_data+'T12:00').toLocaleDateString('pt-BR')+'.':'.');
+  resparc.hidden=false;
+}
 form.addEventListener('submit',async e=>{e.preventDefault();
-  const v=parseFloat(valor.value);
-  try{await api('/transacoes',{method:'POST',body:JSON.stringify({descricao:descricao.value.trim(),valor:tipo.value==='despesa'?-v:v,categoria:categoria.value||undefined})});form.reset();montarCategorias();sugerir();carregar();}
-  catch(err){aviso('msg',msgErro(err),'erro');}});
+  const v=parseFloat(valor.value);resparc.hidden=true;
+  try{
+    if(tipo.value==='despesa'&&forma.value==='parcelado'){
+      const r=await api('/parcelamentos',{method:'POST',body:JSON.stringify({descricao:descricao.value.trim(),valor_vista:v,parcelas:parseInt(pparc.value,10),juros_mensal:parseFloat(pjuros.value)||0,conta:pconta.value.trim()||'Conta Principal',categoria:categoria.value||undefined,data_inicio:pdata.value||undefined})});
+      resumoParc(r);form.reset();restaurarForm();carregar();carregarParcelas();mostrarAlertas(r.alertas);
+    }else{
+      const r=await api('/transacoes',{method:'POST',body:JSON.stringify({descricao:descricao.value.trim(),valor:tipo.value==='despesa'?-v:v,categoria:categoria.value||undefined})});
+      form.reset();restaurarForm();carregar();mostrarAlertas(r.alertas);
+    }
+  }catch(err){aviso('msg',msgErro(err),'erro');}});
 tb.addEventListener('change',async e=>{const s=e.target;if(!s.dataset.catId)return;
-  try{await api('/transacoes/'+s.dataset.catId,{method:'PUT',body:JSON.stringify({categoria:s.value})});carregar();}
+  try{const r=await api('/transacoes/'+s.dataset.catId,{method:'PUT',body:JSON.stringify({categoria:s.value})});carregar();mostrarAlertas(r.alertas);}
   catch(err){await carregar();aviso('msg',msgErro(err),'erro');}});   // em caso de erro volta ao valor salvo e mostra o motivo
 tb.addEventListener('click',async e=>{const id=e.target.dataset.del;
   if(id&&confirm('Excluir esta transação?'))try{await api('/transacoes/'+id,{method:'DELETE'});carregar();}catch(err){aviso('msg',msgErro(err),'erro');}});
@@ -124,8 +183,28 @@ formimp.addEventListener('submit',async e=>{e.preventDefault();
   if(vtotal.checked)fd.append('valor_total','true');
   if(!detparc.checked)fd.append('parcelas','false');
   btnimp.disabled=true;btnimp.textContent='Importando…';
-  try{const r=await api('/simulacoes/importar-extrato',{method:'POST',body:fd});resumoImp(r);formimp.reset();carregar();}
+  try{const r=await api('/simulacoes/importar-extrato',{method:'POST',body:fd});resumoImp(r);formimp.reset();carregar();carregarParcelas();mostrarAlertas(r.alertas);}
   catch(err){aviso('msg',msgErro(err),'erro');}
   btnimp.disabled=false;btnimp.textContent='Importar extrato';
 });
+
+// ---------- compras parceladas em andamento ----------
+const dataBR=iso=>new Date(iso+'T12:00').toLocaleDateString('pt-BR');
+async function carregarParcelas(){try{
+  const l=await api('/parcelamentos');
+  listaparc.innerHTML=l.length?l.map(p=>'<tr><td><b>'+esc(p.descricao)+'</b><span class="selo">'+(p.origem==='manual'?'cadastrada por você':'do extrato')+'</span>'+
+    '<div class="rot">'+esc(p.categoria)+(p.origem==='manual'?(p.juros_mensal>0?' · juros de '+p.juros_mensal.toLocaleString('pt-BR')+'% ao mês · total '+brl(p.valor_total):' · sem juros'):'')+'</div></td>'+
+    '<td>'+esc(p.conta)+'</td><td>'+p.parcelas_pagas+' de '+p.total_parcelas+' pagas<div class="rot">faltam '+p.parcelas_restantes+'</div></td>'+
+    '<td>'+brl(p.valor_parcela)+'</td><td><b>'+brl(p.falta_pagar)+'</b></td><td>'+dataBR(p.proxima_data)+'<div class="rot">até '+dataBR(p.ultima_data)+'</div></td>'+
+    '<td><button class="btn perigo peq" data-delp="'+esc(p.id)+'" data-manual="'+(p.origem==='manual'?1:0)+'" data-pagas="'+p.parcelas_pagas+'" data-rest="'+p.parcelas_restantes+'" data-falta="'+p.falta_pagar+'">Excluir</button></td></tr>').join('')
+    :'<tr><td colspan="7" class="vazio">Nenhuma compra parcelada em andamento. Registre uma acima (Forma de pagamento: Parcelado) ou importe um extrato.</td></tr>';
+}catch(e){aviso('msg',msgErro(e),'erro');}}
+listaparc.addEventListener('click',async e=>{const d=e.target.dataset;if(!d.delp)return;
+  const manual=d.manual==='1',pagas=parseInt(d.pagas,10);
+  if(!confirm('Excluir esta compra parcelada? As '+d.rest+' parcelas futuras ('+brl(parseFloat(d.falta))+') deixam de aparecer na projeção do painel.'+(manual?'':' As parcelas já lançadas nas transações não são apagadas.')))return;
+  const junto=manual&&pagas>0&&confirm('Apagar também as '+pagas+' parcela(s) já lançada(s) nas transações? (OK = apagar, Cancelar = manter)');
+  try{await api('/parcelamentos/'+encodeURIComponent(d.delp)+(junto?'?lancadas=1':''),{method:'DELETE'});carregarParcelas();carregar();}
+  catch(err){aviso('msg',msgErro(err),'erro');}});
+(async()=>{try{contasdl.innerHTML=(await api('/contas')).map(c=>'<option value="'+esc(c.nome)+'"></option>').join('');}catch(e){/* a lista de sugestoes e opcional */}})();
+restaurarForm();carregarParcelas();
 </script></body></html>

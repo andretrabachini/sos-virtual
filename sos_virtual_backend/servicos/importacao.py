@@ -15,6 +15,7 @@ from servicos.extratos import (
     chave_compra,
     detectar_parcela,
     gerar_projecoes,
+    limpar_descricao_parcela,
 )
 from servicos.financeiro import detectar_categoria
 
@@ -151,9 +152,21 @@ def projecao_mensal(usuario_id, renda_mensal, meses):
         Aresta.data < fim,
     ).all()
 
+    nomes = {n.id: n.nome for n in No.query.filter_by(usuario_id=usuario_id).all()}
     totais = defaultdict(float)
-    for a in arestas:
-        totais[a.data.strftime("%Y-%m")] += float(a.peso)
+    itens = defaultdict(list)   # o que compoe cada mes: de qual compra, cartao e categoria vem cada parcela
+    for a in sorted(arestas, key=lambda x: (x.data, x.descricao or "")):
+        mes = a.data.strftime("%Y-%m")
+        totais[mes] += float(a.peso)
+        itens[mes].append({
+            "descricao": limpar_descricao_parcela(a.descricao or ""),
+            "parcela": f"{a.parcela_atual}/{a.total_parcelas}",
+            "valor": float(a.peso),
+            "data": a.data.date().isoformat(),
+            "conta": nomes.get(a.origem_id, "—"),
+            "categoria": nomes.get(a.destino_id, "—"),
+            "origem": "manual" if (a.chave_compra or "").startswith("manual:") else "extrato",
+        })
 
     resultado = []
     for i in range(1, meses + 1):
@@ -162,6 +175,7 @@ def projecao_mensal(usuario_id, renda_mensal, meses):
         resultado.append({
             "mes": mes,
             "comprometido": comprometido,
+            "itens": itens.get(mes, []),
             # sem renda informada no cadastro nao da para calcular o saldo livre
             "saldo_livre": round(renda_mensal - comprometido, 2) if renda_mensal else None,
         })
