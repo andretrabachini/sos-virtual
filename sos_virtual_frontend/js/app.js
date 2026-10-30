@@ -54,8 +54,51 @@ function sair() {
     '<a class="logo" href="dashboard.html">SOS<i>Virtual</i></a>' +
     links.map(([id, nome, url]) =>
       `<a class="nav${id === atual ? ' ativo' : ''}" href="${url}">${nome}</a>`).join('') +
-    `<div class="rodape"><b>${esc(u.nome || 'Visitante')}</b>Conta pessoal<br><button onclick="sair()">Sair</button></div>`;
+    '<button type="button" class="nav nav-conta" data-abrir-conta>Conta</button>' +
+    `<div class="rodape"><button type="button" class="perfil-btn" data-abrir-conta aria-haspopup="dialog" title="Abrir minha conta">` +
+    `<span class="perfil-avatar" data-avatar aria-hidden="true">${esc(inicialDe(u.nome))}</span>` +
+    `<span class="perfil-txt"><b data-nome-usuario>${esc(u.nome || 'Visitante')}</b>Minha conta</span></button>` +
+    `<button type="button" class="sair-btn" onclick="sair()">Sair</button></div>`;
+
+  if (!document.getElementById('estilo-perfil-menu')) {
+    const st = document.createElement('style');
+    st.id = 'estilo-perfil-menu';
+    st.textContent = `
+      .side .rodape .perfil-btn{display:flex;align-items:center;gap:.7rem;width:100%;margin:0 0 .4rem;padding:.5rem;border-radius:var(--r);text-align:left;text-decoration:none;color:#B9C8DA;line-height:1.3}
+      .side .rodape .perfil-btn:hover{background:rgba(255,255,255,.08)}
+      .perfil-btn b{display:block;color:#fff;overflow-wrap:anywhere}
+      .perfil-avatar{display:grid;place-items:center;flex:none;width:2.3rem;height:2.3rem;border-radius:50%;background:var(--brand2,#1C4A7A);color:#fff;font:700 1rem var(--fh,sans-serif)}
+      .perfil-avatar.grande{width:3.4rem;height:3.4rem;font-size:1.4rem}
+      .side .nav-conta{display:none}
+      @media(max-width:820px){.side .nav-conta{display:flex;flex:1;justify-content:center;align-items:center;padding:.65rem .2rem;border:0;border-radius:var(--r);background:none;color:#B9C8DA;font:500 .74rem var(--fb,sans-serif);cursor:pointer}}`;
+    document.head.appendChild(st);
+  }
 })();
+
+// letra do círculo do perfil
+function inicialDe(nome) { return (String(nome || 'V').trim().charAt(0) || 'V').toUpperCase(); }
+
+// atualiza o nome no menu (e em qualquer lugar marcado com data-nome-usuario) depois de editar o perfil
+function atualizarNomeNoMenu() {
+  const nome = usuarioAtual().nome || 'Visitante';
+  document.querySelectorAll('[data-nome-usuario]').forEach(el => { el.textContent = nome; });
+  document.querySelectorAll('[data-avatar]').forEach(el => { el.textContent = inicialDe(nome); });
+}
+
+// abre a janela "Minha conta" (js/perfil.js é carregado só quando o usuário clica)
+function abrirMinhaConta(secao) {
+  const abrir = () => window.abrirPainelConta(secao);
+  if (window.abrirPainelConta) return abrir();
+  const s = document.createElement('script');
+  s.src = 'js/perfil.js';
+  s.onload = abrir;
+  s.onerror = () => alert('Não foi possível abrir a tela da conta. Recarregue a página e tente de novo.');
+  document.head.appendChild(s);
+}
+document.addEventListener('click', e => {
+  const gatilho = e.target.closest && e.target.closest('[data-abrir-conta]');
+  if (gatilho) abrirMinhaConta();
+});
 
 // mensagem amigável para qualquer erro de API (servidor fora do ar ou erro de validação)
 const msgErro = e => e instanceof TypeError
@@ -76,6 +119,7 @@ function aviso(id, texto, tipo) {
 // Fecha com o botão, com Esc ou clicando fora; o foco volta para onde estava.
 function mostrarAlertas(lista) {
   if (!Array.isArray(lista) || !lista.length) return;
+  if (localStorage.getItem('sosv_pref_alertas_popup') === '0') return;   // desligado em Minha conta > Preferências
   if (!document.getElementById('estilo-alerta')) {
     const st = document.createElement('style');
     st.id = 'estilo-alerta';

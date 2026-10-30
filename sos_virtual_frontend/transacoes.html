@@ -41,7 +41,7 @@
         <div class="form-grid">
           <div class="campo"><label for="pparc">Número de parcelas</label><input type="number" id="pparc" min="2" max="36" step="1" placeholder="Ex.: 10"></div>
           <div class="campo"><label for="pjuros">Juros ao mês (%)</label><input type="number" id="pjuros" min="0" max="30" step="0.01" placeholder="0 = sem juros"></div>
-          <div class="campo"><label for="pconta">Cartão ou conta</label><input id="pconta" list="contasdl" maxlength="100" value="Conta Principal" autocomplete="off"><datalist id="contasdl"></datalist></div>
+          <div class="campo"><label for="pcontasel">Cartão ou conta</label><select id="pcontasel"></select><input id="pconta" maxlength="100" placeholder="Nome da nova conta ou cartão" autocomplete="off" hidden style="margin-top:.5rem"></div>
           <div class="campo"><label for="pdata">Data da 1ª parcela</label><input type="date" id="pdata"></div>
         </div>
         <div class="rot" id="previaparc" aria-live="polite" style="margin:-.3rem 0 1rem"></div>
@@ -55,7 +55,7 @@
     <p class="rot" style="margin-bottom:1rem">Envie o extrato do banco ou a fatura do cartão em CSV ou OFX (até 2 MB). Compras parceladas, como "PARC 02/05", são reconhecidas e as parcelas futuras aparecem na projeção do painel. O arquivo é lido na hora e não fica guardado: só os lançamentos entram no sistema.</p>
     <form id="formimp" class="form-grid">
       <div class="campo larga"><label for="arquivo">Arquivo do extrato (CSV ou OFX)</label><input type="file" id="arquivo" accept=".csv,.ofx,.qfx" required></div>
-      <div class="campo larga"><label for="conta">Conta ou cartão</label><input id="conta" value="Conta Principal" maxlength="100"></div>
+      <div class="campo larga"><label for="contasel">Conta ou cartão</label><select id="contasel"></select><input id="conta" maxlength="100" placeholder="Nome da nova conta ou cartão" autocomplete="off" hidden style="margin-top:.5rem"></div>
       <div class="opcoes">
         <label><input type="checkbox" id="cartao"><span>É fatura de cartão (as compras aparecem como valores positivos)</span></label>
         <label><input type="checkbox" id="vtotal"><span>Nas compras parceladas, o valor do arquivo é o total da compra (por padrão, é o valor de uma parcela)</span></label>
@@ -131,7 +131,7 @@ function previa(){
         ' · total '+brl(r.valor_total)+(r.juros_total>0?' · juros de <b class="neg">'+brl(r.juros_total)+'</b>':' · sem juros');
     }catch(e){if(minha===seqPrev)previaparc.textContent=e instanceof TypeError?'':e.message;}},350);
 }
-function restaurarForm(){montarCategorias();sugerir();pdata.value=hojeISO();atualizarForma();}
+function restaurarForm(){montarCategorias();sugerir();pdata.value=hojeISO();atualizarForma();montarSelecaoConta(pcontasel,pconta);}
 [valor,pparc,pjuros].forEach(el=>el.addEventListener('input',previa));
 forma.addEventListener('change',atualizarForma);
 tipo.addEventListener('change',atualizarForma);
@@ -145,8 +145,10 @@ form.addEventListener('submit',async e=>{e.preventDefault();
   const v=parseFloat(valor.value);resparc.hidden=true;
   try{
     if(tipo.value==='despesa'&&forma.value==='parcelado'){
-      const r=await api('/parcelamentos',{method:'POST',body:JSON.stringify({descricao:descricao.value.trim(),valor_vista:v,parcelas:parseInt(pparc.value,10),juros_mensal:parseFloat(pjuros.value)||0,conta:pconta.value.trim()||'Conta Principal',categoria:categoria.value||undefined,data_inicio:pdata.value||undefined})});
-      resumoParc(r);form.reset();restaurarForm();carregar();carregarParcelas();mostrarAlertas(r.alertas);
+      const nomeConta=nomeEscolhido(pcontasel,pconta);
+      if(!nomeConta)return aviso('msg','Digite o nome da nova conta ou cartão.','erro');
+      const r=await api('/parcelamentos',{method:'POST',body:JSON.stringify({descricao:descricao.value.trim(),valor_vista:v,parcelas:parseInt(pparc.value,10),juros_mensal:parseFloat(pjuros.value)||0,conta:nomeConta,categoria:categoria.value||undefined,data_inicio:pdata.value||undefined})});
+      resumoParc(r);form.reset();restaurarForm();carregar();carregarParcelas();atualizarContas();avisarContasMudaram();mostrarAlertas(r.alertas);
     }else{
       const r=await api('/transacoes',{method:'POST',body:JSON.stringify({descricao:descricao.value.trim(),valor:tipo.value==='despesa'?-v:v,categoria:categoria.value||undefined})});
       form.reset();restaurarForm();carregar();mostrarAlertas(r.alertas);
@@ -177,13 +179,15 @@ formimp.addEventListener('submit',async e=>{e.preventDefault();
   if(!f)return aviso('msg','Escolha um arquivo CSV ou OFX.','erro');
   if(!/\.(csv|ofx|qfx)$/i.test(f.name))return aviso('msg','Formato não suportado. Envie um arquivo CSV ou OFX.','erro');
   if(f.size>2*1024*1024)return aviso('msg','O arquivo passa de 2 MB.','erro');
+  const nomeConta=nomeEscolhido(contasel,conta);
+  if(!nomeConta)return aviso('msg','Digite o nome da nova conta ou cartão.','erro');
   const fd=new FormData();
-  fd.append('arquivo',f);fd.append('conta',conta.value.trim()||'Conta Principal');
+  fd.append('arquivo',f);fd.append('conta',nomeConta);
   if(cartao.checked)fd.append('cartao','true');
   if(vtotal.checked)fd.append('valor_total','true');
   if(!detparc.checked)fd.append('parcelas','false');
   btnimp.disabled=true;btnimp.textContent='Importando…';
-  try{const r=await api('/simulacoes/importar-extrato',{method:'POST',body:fd});resumoImp(r);formimp.reset();carregar();carregarParcelas();mostrarAlertas(r.alertas);}
+  try{const r=await api('/simulacoes/importar-extrato',{method:'POST',body:fd});resumoImp(r);formimp.reset();montarSelecaoConta(contasel,conta);carregar();carregarParcelas();atualizarContas();avisarContasMudaram();mostrarAlertas(r.alertas);}
   catch(err){aviso('msg',msgErro(err),'erro');}
   btnimp.disabled=false;btnimp.textContent='Importar extrato';
 });
@@ -205,6 +209,26 @@ listaparc.addEventListener('click',async e=>{const d=e.target.dataset;if(!d.delp
   const junto=manual&&pagas>0&&confirm('Apagar também as '+pagas+' parcela(s) já lançada(s) nas transações? (OK = apagar, Cancelar = manter)');
   try{await api('/parcelamentos/'+encodeURIComponent(d.delp)+(junto?'?lancadas=1':''),{method:'DELETE'});carregarParcelas();carregar();}
   catch(err){aviso('msg',msgErro(err),'erro');}});
-(async()=>{try{contasdl.innerHTML=(await api('/contas')).map(c=>'<option value="'+esc(c.nome)+'"></option>').join('');}catch(e){/* a lista de sugestoes e opcional */}})();
+// ---------- cartões e contas: a lista se atualiza sozinha ----------
+const NOVA='__nova__';
+let nomesContas=[];
+function montarSelecaoConta(sel,novo){
+  const atual=sel.value,lista=nomesContas.length?nomesContas:['Conta Principal'];
+  sel.innerHTML=lista.map(n=>'<option>'+esc(n)+'</option>').join('')+'<option value="'+NOVA+'">+ Nova conta ou cartão…</option>';
+  sel.value=[...sel.options].some(o=>o.value===atual)&&atual?atual:(lista.includes('Conta Principal')?'Conta Principal':lista[0]);
+  novo.hidden=sel.value!==NOVA;
+}
+const nomeEscolhido=(sel,novo)=>sel.value===NOVA?novo.value.trim():sel.value;
+async function atualizarContas(){
+  try{nomesContas=(await api('/contas')).map(c=>c.nome);}catch(e){return;}
+  montarSelecaoConta(pcontasel,pconta);montarSelecaoConta(contasel,conta);
+}
+const avisarContasMudaram=()=>{try{localStorage.setItem('sosv_contas_mudou',String(Date.now()));}catch(e){}};   // as outras abas ouvem isto
+[[pcontasel,pconta],[contasel,conta]].forEach(([sel,novo])=>sel.addEventListener('change',()=>{novo.hidden=sel.value!==NOVA;if(!novo.hidden)novo.focus();}));
+let tContas=null;const agendarContas=()=>{clearTimeout(tContas);tContas=setTimeout(atualizarContas,250);};
+window.addEventListener('focus',agendarContas);                                                       // voltou para esta aba/janela
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)agendarContas();});
+window.addEventListener('storage',e=>{if(e.key==='sosv_contas_mudou')agendarContas();});            // outra aba (ex.: Otimizador) mudou as contas
+atualizarContas();
 restaurarForm();carregarParcelas();
 </script></body></html>

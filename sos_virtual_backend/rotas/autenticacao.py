@@ -1,18 +1,19 @@
 import hashlib
 import os
+from collections import defaultdict
 import re
 import secrets
 from datetime import datetime, timedelta
 
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import create_access_token, jwt_required
+from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
 from flask_limiter.util import get_remote_address
 from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from database import db
 from extensoes import limiter, usuario_id_atual
-from modelos.modelos import RedefinicaoSenha, Usuario
+from modelos.modelos import ContaCategoria, No, RedefinicaoSenha, Usuario
 from servicos.email_service import enviar_email_redefinicao, enviar_email_senha_alterada
 
 # agrupa todas as rotas de autenticacao neste blueprint
@@ -259,7 +260,54 @@ def redefinir_senha():
     return jsonify({"mensagem": "senha alterada com sucesso"})
 
 
+# ---------- perfil e troca de senha (tela "Minha conta") ----------
+
+@auth_bp.route("/perfil", methods=["GET"])
+@jwt_required()
+def obter_perfil():
+    usuario = db.session.get(Usuario, usuario_id_atual())
+    if not usuario:
+        return _erro("usuário não encontrado", 404)
+    return jsonify(usuario.para_dict())
+
+
+@auth_bp.route("/senha", methods=["PUT"])
+@jwt_required()
+@limiter.limit("5 per hour", key_func=lambda: f"senha:{get_jwt_identity()}")
+def alterar_senha():
+    """troca a senha de quem ja esta logado: exige a senha atual, para um token roubado nao bastar"""
+    dados = _corpo_json()
+    if dados is None:
+        return _erro("corpo da requisição inválido", 400)
+    usuario = db.session.get(Usuario, usuario_id_atual())
+    if not usuario:
+        return _erro("usuário não encontrado", 404)
+
+    atual, nova = dados.get("senha_atual"), dados.get("nova_senha")
+    # 403 (e nao 401): o front trata 401 como "sessao expirada" e deslogaria quem so errou a senha
+    if not isinstance(atual, str) or len(atual) > SENHA_MAX or not check_password_hash(usuario.senha_hash, atual):
+        return _erro("senha atual incorreta", 403)
+    if not isinstance(nova, str) or not SENHA_MIN <= len(nova) <= SENHA_MAX:
+        return _erro(f"a nova senha deve ter entre {SENHA_MIN} e {SENHA_MAX} caracteres", 400)
+    if nova == atual:
+        return _erro("a nova senha precisa ser diferente da atual", 400)
+
+    usuario.senha_hash = generate_password_hash(nova)
+    # links de redefinicao pedidos antes desta troca deixam de valer
+    RedefinicaoSenha.query.filter_by(usuario_id=usuario.id, usado_em=None).update({"usado_em": datetime.utcnow()})
+    db.session.commit()
+    enviar_email_senha_alterada(usuario.email, usuario.nome)
+    return jsonify({"mensagem": "senha alterada com sucesso"})
+
+
 # ---------- direitos do titular (LGPD, art. 18) ----------
+
+def _contas_para_exportar(usuario_id):
+    aceitas = defaultdict(list)
+    for linha in ContaCategoria.query.filter_by(usuario_id=usuario_id).all():
+        aceitas[linha.conta_id].append(linha.categoria)
+    return [{**conta.para_dict(), "categorias_aceitas": sorted(aceitas.get(conta.id, []))}
+            for conta in No.query.filter_by(usuario_id=usuario_id, tipo="conta").order_by(No.nome).all()]
 
 @auth_bp.route("/meus-dados", methods=["GET"])
 @jwt_required()
@@ -278,6 +326,14 @@ def exportar_dados():
         "transacoes": [t.para_dict() for t in usuario.transacoes],
         "metas": [m.para_dict() for m in usuario.metas],
         "alertas": [a.para_dict() for a in usuario.alertas],
+        "contas": _contas_para_exportar(usuario.id),
+        "compras_parceladas": [{
+            "descricao": p.descricao, "valor_vista": p.valor_vista, "valor_parcela": p.valor_parcela,
+            "valor_total": p.valor_total, "numero_parcelas": p.numero_parcelas, "juros_mensal": p.juros_mensal,
+            "conta": p.conta, "categoria": p.categoria,
+            "data_inicio": p.data_inicio.isoformat() if p.data_inicio else None,
+        } for p in usuario.parcelamentos],
+        "parcelas_futuras": [a.para_dict() for a in usuario.arestas if a.projetada],
     })
 
 

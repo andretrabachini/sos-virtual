@@ -96,7 +96,7 @@ formconta.addEventListener('submit',async e=>{e.preventDefault();aviso('msg');
   try{
     if(editando)await api('/contas/'+editando,{method:'PUT',body:JSON.stringify(corpo)});
     else await api('/contas',{method:'POST',body:JSON.stringify(corpo)});
-    limpar();await carregarContas();calcular();
+    limpar();await carregarContas();calcular();avisarContasMudaram();
   }catch(err){aviso('msg',msgErro(err),'erro');}});
 cancelar.addEventListener('click',limpar);
 const DICAS={'Alimentação':'mercado, padaria','Restaurante':'refeições, delivery'};
@@ -108,8 +108,13 @@ listac.addEventListener('click',async e=>{const t=e.target.dataset;
       editando=c.id;cnome.value=c.nome;ccap.value=c.capacidade??'';ctipo.value=c.custo>0?'custo':'beneficio';cpct.value=Math.abs(c.custo)||'';marcar(c.categorias||[]);
       btnconta.textContent='Salvar alterações';cancelarbox.hidden=false;cnome.focus();}
     else if(t.del&&confirm('Excluir esta conta? As parcelas futuras projetadas a partir dela também serão removidas.')){
-      await api('/contas/'+t.del,{method:'DELETE'});if(String(editando)===t.del)limpar();await carregarContas();calcular();}
+      await api('/contas/'+t.del,{method:'DELETE'});if(String(editando)===t.del)limpar();await carregarContas();calcular();avisarContasMudaram();}
   }catch(err){aviso('msg',msgErro(err),'erro');}});
 calc.addEventListener('click',calcular);
+// as contas também mudam em outras telas (ex.: importar extrato cria o cartão): esta lista acompanha
+const avisarContasMudaram=()=>{try{localStorage.setItem('sosv_contas_mudou',String(Date.now()));}catch(e){}};
+let tRec=null;const agendarRecarga=()=>{clearTimeout(tRec);tRec=setTimeout(async()=>{try{await carregarContas();calcular();}catch(e){}},250);};
+window.addEventListener('storage',e=>{if(e.key==='sosv_contas_mudou')agendarRecarga();});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)agendarRecarga();});
 (async()=>{try{await Promise.all([carregarContas(),carregarDespesas()]);calcular();}catch(e){aviso('msg',msgErro(e),'erro');}})();
 </script></body></html>
