@@ -8,7 +8,7 @@
   const corDaConta = c => (c.custo < 0 ? COR.pos : c.custo > 0 ? COR.neg : COR.neutro);
   const pct = v => Math.abs(v).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + '%';
 
-  function legenda(temRestrita, temFalta) {
+  function legenda(temRestrita, temFalta, temRegistrado, temSugerido) {
     const item = (estilo, texto) =>
       '<span style="display:inline-flex;align-items:center;gap:.4rem;margin-right:1rem"><i style="width:.8rem;height:.8rem;border-radius:3px;display:inline-block;' +
       estilo + '"></i>' + texto + '</span>';
@@ -16,6 +16,8 @@
       item('background:' + COR.neg, 'conta com juros/taxa') +
       (temRestrita ? item('background:' + COR.tinta + ';border:2px dashed ' + COR.ouro, 'conta restrita (vale)') : '') +
       (temFalta ? item('background:#fff;border:2px solid ' + COR.neg, 'despesa sem conta suficiente') : '') +
+      (temRegistrado ? item('width:1.5rem;height:0;border-top:4px solid ' + COR.suave, 'linha cheia: já pago nessa conta') : '') +
+      (temSugerido ? item('width:1.5rem;height:0;border-top:4px dashed ' + COR.suave, 'tracejada: sugestão para o que está sem conta') : '') +
       '<span>· quanto mais grossa a linha, mais dinheiro passa por ela</span></div>';
   }
 
@@ -39,19 +41,21 @@
     const ligacoes = dados.arestas.map(a => {
       const conta = porId[a.origem], cat = porId[a.destino];
       const largura = (2 + (12 * a.valor) / maior).toFixed(1);
+      const sugerida = a.tipo === 'sugerido';
       return '<path d="M' + xa + ' ' + yConta[a.origem] + ' C' + xm + ' ' + yConta[a.origem] + ',' + xm + ' ' + yCat[a.destino] + ',' + xb + ' ' + yCat[a.destino] +
-        '" fill="none" stroke="' + corDaConta(conta) + '" stroke-opacity=".5" stroke-width="' + largura + '" stroke-linecap="round">' +
-        '<title>' + esc(conta.nome) + ' → ' + esc(cat.nome) + ': ' + brl(a.valor) + '</title></path>';
+        '" fill="none" stroke="' + corDaConta(conta) + '" stroke-opacity="' + (sugerida ? '.45' : '.65') + '" stroke-width="' + largura + '"' +
+        (sugerida ? ' stroke-dasharray="' + Math.max(8, largura * 1.6).toFixed(1) + ' ' + Math.max(5, largura * 0.9).toFixed(1) + '" stroke-linecap="butt"' : ' stroke-linecap="round"') + '>' +
+        '<title>' + esc(conta.nome) + ' → ' + esc(cat.nome) + ': ' + brl(a.valor) + (sugerida ? ' (sugestão)' : ' (já pago)') + '</title></path>';
     }).join('');
 
     const nosConta = contas.map(c => {
       const y = yConta[c.id] - ALT / 2;
-      const sub = c.usado > 0
-        ? 'paga ' + brl(c.usado)
-        : 'não usada';
+      const reg = c.usado_registrado || 0, sug = c.usado_sugerido || 0;
+      const sub = reg > 0 && sug === 0 ? 'pago ' + brl(reg) : sug > 0 && reg === 0 ? 'sugerido ' + brl(sug) : c.usado > 0 ? 'paga ' + brl(c.usado) : 'não usada';
+      const detalhe = reg > 0 && sug > 0 ? ' (já pago ' + brl(reg) + ' + sugerido ' + brl(sug) + ')' : '';
       const info = c.custo < 0 ? 'cashback ' + pct(c.custo) : c.custo > 0 ? 'juros/taxa ' + pct(c.custo) : 'sem benefício';
       const so = c.restrita && c.categorias && c.categorias.length ? ' — só paga: ' + c.categorias.join(', ') : '';
-      return '<g><title>' + esc(c.nome) + ' — ' + esc(info) + esc(so) + ' — ' + esc(sub) + '</title>' +
+      return '<g><title>' + esc(c.nome) + ' — ' + esc(info) + esc(so) + ' — ' + esc(sub + detalhe) + '</title>' +
         '<rect x="' + X_CONTA + '" y="' + y + '" width="' + LARG + '" height="' + ALT + '" rx="10" fill="' + COR.tinta + '" opacity="' + (c.usado > 0 ? 1 : 0.55) + '"' +
         (c.restrita ? ' stroke="' + COR.ouro + '" stroke-width="2" stroke-dasharray="5 3"' : '') + '/>' +
         '<rect x="' + X_CONTA + '" y="' + y + '" width="6" height="' + ALT + '" rx="3" fill="' + corDaConta(c) + '"/>' +
@@ -62,7 +66,7 @@
     const nosCat = cats.map(c => {
       const y = yCat[c.id] - ALT / 2;
       const falta = c.faltam > 0;
-      return '<g><title>' + esc(c.nome) + ': ' + brl(c.valor) + (falta ? ' — faltam ' + brl(c.faltam) + ' (nenhuma conta cobre)' : '') + '</title>' +
+      return '<g><title>' + esc(c.nome) + ': ' + brl(c.valor) + (c.registrado > 0 && c.pendente > 0 ? ' (já pago em contas: ' + brl(c.registrado) + '; sem conta: ' + brl(c.pendente) + ')' : '') + (falta ? ' — faltam ' + brl(c.faltam) + ' (nenhuma conta cobre)' : '') + '</title>' +
         '<rect x="' + X_CAT + '" y="' + y + '" width="' + LARG + '" height="' + ALT + '" rx="23" fill="#fff" stroke="' + (falta ? COR.neg : COR.linha) + '" stroke-width="2"/>' +
         '<text x="' + (X_CAT + LARG / 2) + '" y="' + (y + 20) + '" text-anchor="middle" fill="' + COR.tinta + '" font-size="13" font-weight="600">' + esc(cortar(c.nome, 18)) + '</text>' +
         '<text x="' + (X_CAT + LARG / 2) + '" y="' + (y + 36) + '" text-anchor="middle" fill="' + (falta ? COR.neg : COR.suave) + '" font-size="11">' + esc(falta ? 'faltam ' + brl(c.faltam) : brl(c.valor)) + '</text></g>';
@@ -70,6 +74,6 @@
 
     const resumo = 'Mapa de pagamentos: ' + contas.length + ' conta(s) pagando ' + cats.length + ' despesa(s). Os detalhes estão na tabela.';
     alvo.innerHTML = '<svg viewBox="0 0 ' + L + ' ' + H + '" role="img" aria-label="' + esc(resumo) +
-      '" style="display:block;width:100%;height:auto;max-height:56vh;margin:0 auto" font-family="Figtree,system-ui,sans-serif">' + ligacoes + nosConta + nosCat + '</svg>' + legenda(contas.some(c => c.restrita), cats.some(c => c.faltam > 0));
+      '" style="display:block;width:100%;height:auto;max-height:56vh;margin:0 auto" font-family="Figtree,system-ui,sans-serif">' + ligacoes + nosConta + nosCat + '</svg>' + legenda(contas.some(c => c.restrita), cats.some(c => c.faltam > 0), dados.arestas.some(a => a.tipo !== 'sugerido'), dados.arestas.some(a => a.tipo === 'sugerido'));
   };
 })();

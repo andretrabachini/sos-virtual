@@ -12,7 +12,7 @@
 <body data-pagina="dashboard">
 <div class="app"><aside id="menu"></aside>
 <main class="conteudo">
-  <header><h1 id="ola">Painel</h1><p id="mes">Resumo do mês</p></header>
+  <header><h1 id="ola">Painel</h1><p id="mes">Resumo do mês</p><div id="seletor-mes" style="margin-top:.7rem"></div></header>
   <div id="msg" class="aviso erro" hidden role="alert"></div>
   <section class="grid">
     <div class="painel"><div class="rot">Receitas</div><div class="num pos" id="rec">—</div></div>
@@ -25,7 +25,7 @@
     <section class="painel"><h2>Para onde o dinheiro vai</h2><div id="grafo">Carregando…</div></section>
   </div>
   <section class="painel"><h2>Parcelas dos próximos meses</h2><div id="proj"><p class="vazio">Carregando…</p></div></section>
-  <section class="painel"><div class="filtro"><h2>Últimas transações</h2><a href="transacoes.html">Ver todas</a></div>
+  <section class="painel"><div class="filtro"><h2>Últimas transações do mês</h2><a href="transacoes.html">Ver todas</a></div>
     <table><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th></tr></thead><tbody id="tb"></tbody></table>
   </section>
 </main></div>
@@ -33,27 +33,42 @@
 <script src="js/grafo_visualizador.js"></script>
 <script>
 const u=usuarioAtual();ola.textContent='Olá, '+((u.nome||'').split(' ')[0]||'bem-vindo');
-(async()=>{try{
-  const d=await api('/dashboard');
-  const [a,m]=d.mes.split('-');mes.textContent='Resumo de '+new Date(a,m-1).toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+
+// resumo do mês escolhido (receitas, despesas, saldo, categorias e últimas transações)
+let seqResumo=0;
+async function carregarResumo(m){const minha=++seqResumo;try{
+  aviso('msg');
+  const d=await api('/dashboard?mes='+m);
+  if(minha!==seqResumo)return;                       // o usuário já trocou de mês: ignora a resposta antiga
+  mes.textContent='Resumo de '+nomeDoMes(d.mes);
   rec.textContent=brl(d.receita_total);des.textContent=brl(d.despesa_total);
   sal.textContent=brl(d.saldo);sal.className='num '+(d.saldo<0?'neg':'pos');
   met.textContent=d.metas.filter(x=>x.progresso<100).length;
   const c=Object.entries(d.por_categoria).sort((x,y)=>y[1]-x[1]),max=c.length?c[0][1]:1;
-  cats.innerHTML=c.length?c.map(([n,v])=>'<div class="linha"><span>'+esc(n)+'</span><b>'+brl(v)+'</b></div><div class="barra"><i style="width:'+v/max*100+'%"></i></div>').join(''):'<p class="vazio">Nenhum gasto neste mês ainda.</p>';
-  tb.innerHTML=d.transacoes_recentes.length?d.transacoes_recentes.map(t=>'<tr><td>'+new Date(t.data).toLocaleDateString('pt-BR')+'</td><td>'+esc(t.descricao)+'</td><td>'+esc(t.categoria)+'</td><td class="'+(t.valor>0?'pos':'neg')+'">'+(t.valor>0?'+':'−')+brl(Math.abs(t.valor))+'</td></tr>').join(''):'<tr><td colspan="4" class="vazio">Nenhuma transação ainda.</td></tr>';
-}catch(e){aviso('msg',msgErro(e),'erro');}})();
+  cats.innerHTML=c.length?c.map(([n,v])=>'<div class="linha"><span>'+esc(n)+'</span><b>'+brl(v)+'</b></div><div class="barra"><i style="width:'+v/max*100+'%"></i></div>').join(''):'<p class="vazio">Nenhum gasto neste mês.</p>';
+  tb.innerHTML=d.transacoes_recentes.length?d.transacoes_recentes.map(t=>'<tr><td>'+new Date(t.data).toLocaleDateString('pt-BR')+'</td><td>'+esc(t.descricao)+(t.conta?'<div class="rot">'+esc(t.conta)+'</div>':'')+'</td><td>'+esc(t.categoria)+'</td><td class="'+(t.valor>0?'pos':'neg')+'">'+(t.valor>0?'+':'−')+brl(Math.abs(t.valor))+'</td></tr>').join(''):'<tr><td colspan="4" class="vazio">Nenhuma transação neste mês.</td></tr>';
+}catch(e){if(minha===seqResumo)aviso('msg',msgErro(e),'erro');}}
 
-// mapa "para onde o dinheiro vai": a melhor forma de pagar as despesas do mês (grafo de fluxo de custo mínimo)
-(async()=>{try{
-  const g=await api('/grafo');
+// mapa "para onde o dinheiro vai": o que já foi pago em cada conta (linha cheia) + sugestão para o que está sem conta (tracejada)
+let seqGrafo=0;
+async function carregarGrafo(m){const minha=++seqGrafo;try{
+  const g=await api('/grafo?mes='+m);
+  if(minha!==seqGrafo)return;
+  grafo.removeAttribute('style');                    // volta ao quadro tracejado de "sem dados"
   if(g.nos){
     grafo.style.cssText='height:auto;border:0;display:block;padding:0';
     desenharGrafo(grafo,g);
+    const linhas=[];
+    if(g.total_registrado>0)linhas.push('Já pago em contas: <b>'+brl(g.total_registrado)+'</b>');
+    if(g.total_pendente>0)linhas.push('Sem conta definida: <b>'+brl(g.total_pendente)+'</b> (a sugestão está tracejada)');
+    linhas.push((g.beneficio_total<0?'Custo estimado de juros e taxas: ':'Benefício estimado de cashback: ')+'<b>'+brl(Math.abs(g.beneficio_total))+'</b>');
     if(g.status==='gargalo')grafo.insertAdjacentHTML('beforeend','<p class="aviso" style="margin:.8rem 0 0">'+esc(g.mensagem)+' <a href="grafo.html">Ajustar contas</a></p>');
-    else grafo.insertAdjacentHTML('beforeend','<p class="rot" style="margin-top:.6rem">'+(g.beneficio_total<0?'Custo estimado de juros e taxas: ':'Benefício estimado de cashback: ')+'<b>'+brl(Math.abs(g.beneficio_total))+'</b> · <a href="grafo.html">ver detalhes e simular</a></p>');
+    grafo.insertAdjacentHTML('beforeend','<p class="rot" style="margin-top:.6rem">'+linhas.join(' · ')+' · <a href="grafo.html">ver detalhes e simular</a></p>');
   }else grafo.innerHTML='<div>'+esc(g.mensagem)+'<br><a href="grafo.html">Cadastrar contas e cartões</a></div>';
-}catch(e){grafo.textContent=msgErro(e);}})();
+}catch(e){if(minha===seqGrafo)grafo.textContent=msgErro(e);}}
+
+montarSeletorMes(document.getElementById('seletor-mes'),m=>{carregarResumo(m);carregarGrafo(m);});
+carregarResumo(mesSelecionado());carregarGrafo(mesSelecionado());
 
 // projeção das parcelas futuras: cada mês abre e mostra de quais compras vem o valor
 (async()=>{try{

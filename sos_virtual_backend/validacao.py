@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 
 from flask import request, jsonify
@@ -36,6 +37,17 @@ def numero(valor, minimo, maximo):
     if valor != valor or valor < minimo or valor > maximo:
         return None
     return round(float(valor), 2)
+
+
+_MES_RE = re.compile(r"^(\d{4})-(0[1-9]|1[0-2])$")
+
+
+def mes_valido(valor):
+    """devolve 'AAAA-MM' se for um mes valido (anos 2000 a 2100), senao None"""
+    if not isinstance(valor, str):
+        return None
+    achou = _MES_RE.match(valor)
+    return valor if achou and 2000 <= int(achou.group(1)) <= 2100 else None
 
 
 def data_iso(valor):

@@ -167,3 +167,54 @@ function mostrarAlertas(lista) {
   document.getElementById('alerta-ok').addEventListener('click', fechar);
   document.getElementById('alerta-ok').focus();
 }
+
+// ---------- mês exibido: o mesmo em Painel, Transações, Alertas e Otimizador ----------
+// guardado na sessão da aba: ao navegar pelo menu o mês escolhido continua; numa aba nova volta para o mês atual
+const CHAVE_MES = 'sosv_mes';
+const MES_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+function mesAtualISO() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
+function mesSelecionado() {
+  const m = sessionStorage.getItem(CHAVE_MES);
+  return MES_RE.test(m || '') ? m : mesAtualISO();
+}
+function definirMes(m) { if (MES_RE.test(m)) sessionStorage.setItem(CHAVE_MES, m); }
+function deslocarMes(m, passos) {
+  const [a, mm] = m.split('-').map(Number), d = new Date(a, mm - 1 + passos, 1);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
+function nomeDoMes(m) {
+  const [a, mm] = m.split('-').map(Number);
+  return new Date(a, mm - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+}
+
+// desenha o seletor dentro de `alvo` e chama aoMudar(mes) quando o usuário troca de mês.
+// opcoes.id define o id do campo de mês. devolve { valor(), definir(mes) }
+function montarSeletorMes(alvo, aoMudar, opcoes) {
+  if (!document.getElementById('estilo-seletor-mes')) {
+    const st = document.createElement('style');
+    st.id = 'estilo-seletor-mes';
+    st.textContent = `
+      .seletor-mes{display:inline-flex;align-items:center;gap:.4rem;flex-wrap:wrap}
+      .seletor-mes input[type=month]{padding:.4rem .6rem;border:1.5px solid var(--line,#DDE5ED);border-radius:var(--r,10px);font:inherit;background:#fff;color:var(--ink,#0E2A47)}
+      .seletor-mes .btn{padding:.4rem .8rem}`;
+    document.head.appendChild(st);
+  }
+  alvo.innerHTML =
+    '<div class="seletor-mes" role="group" aria-label="Mês exibido">' +
+    '<button type="button" class="btn sec peq" data-mes-ant aria-label="Mês anterior">‹</button>' +
+    '<input type="month" min="2000-01" max="2100-12" aria-label="Escolher o mês"' + (opcoes && opcoes.id ? ' id="' + opcoes.id + '"' : '') + '>' +
+    '<button type="button" class="btn sec peq" data-mes-prox aria-label="Próximo mês">›</button>' +
+    '<button type="button" class="btn sec peq" data-mes-hoje>Mês atual</button></div>';
+  const campo = alvo.querySelector('input'), hoje = alvo.querySelector('[data-mes-hoje]');
+  const mostrar = m => { campo.value = m; hoje.hidden = m === mesAtualISO(); };
+  const trocar = m => { if (!MES_RE.test(m)) return; definirMes(m); mostrar(m); aoMudar(m); };
+  mostrar(mesSelecionado());
+  campo.addEventListener('change', () => trocar(campo.value));
+  alvo.querySelector('[data-mes-ant]').addEventListener('click', () => trocar(deslocarMes(mesSelecionado(), -1)));
+  alvo.querySelector('[data-mes-prox]').addEventListener('click', () => trocar(deslocarMes(mesSelecionado(), 1)));
+  hoje.addEventListener('click', () => trocar(mesAtualISO()));
+  return { valor: mesSelecionado, definir: mostrar };
+}

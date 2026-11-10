@@ -13,7 +13,8 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 from database import db
 from extensoes import limiter, usuario_id_atual
-from modelos.modelos import ContaCategoria, No, RedefinicaoSenha, Usuario
+from modelos.modelos import Alerta, Aresta, ContaCategoria, Meta, No, Parcelamento, RedefinicaoSenha, Transacao, Usuario
+from servicos.contas import nomes_das_contas, transacao_com_conta
 from servicos.email_service import enviar_email_redefinicao, enviar_email_senha_alterada
 
 # agrupa todas as rotas de autenticacao neste blueprint
@@ -317,13 +318,14 @@ def exportar_dados():
     if not usuario:
         return _erro("usuário não encontrado", 404)
 
+    nomes = nomes_das_contas(usuario.id)
     return jsonify({
         "usuario": {
             **usuario.para_dict(),
             "criado_em": usuario.criado_em.isoformat() if usuario.criado_em else None,
             "lgpd_aceito_em": usuario.lgpd_aceito_em.isoformat() if usuario.lgpd_aceito_em else None,
         },
-        "transacoes": [t.para_dict() for t in usuario.transacoes],
+        "transacoes": [transacao_com_conta(t, nomes) for t in usuario.transacoes],
         "metas": [m.para_dict() for m in usuario.metas],
         "alertas": [a.para_dict() for a in usuario.alertas],
         "contas": _contas_para_exportar(usuario.id),
@@ -352,6 +354,9 @@ def excluir_conta():
     if not isinstance(senha, str) or not check_password_hash(usuario.senha_hash, senha):
         return _erro("senha incorreta", 403)
 
-    db.session.delete(usuario)  # o cascade do modelo apaga transacoes, metas e alertas
+    # apaga tudo do usuario em ordem explicita (quem aponta para outras tabelas primeiro): funciona com as chaves estrangeiras do MySQL
+    for modelo in (ContaCategoria, Aresta, Transacao, Parcelamento, RedefinicaoSenha, Alerta, Meta, No):
+        modelo.query.filter_by(usuario_id=usuario.id).delete(synchronize_session=False)
+    db.session.delete(usuario)
     db.session.commit()
     return jsonify({"mensagem": "conta e dados removidos"})

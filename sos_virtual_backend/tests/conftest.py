@@ -11,6 +11,16 @@ os.environ.setdefault("JWT_SECRET_KEY", "chave-so-para-testes-" + "x" * 40)
 os.environ["SMTP_HOST"] = ""            # nenhum e-mail de verdade sai durante os testes
 
 import pytest
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
+
+
+@event.listens_for(Engine, "connect")
+def _chaves_estrangeiras_no_sqlite(conexao, _registro):
+    """o SQLite ignora chaves estrangeiras por padrao; o MySQL nao. ligadas aqui, os testes pegam erros de ordem de exclusao"""
+    cursor = conexao.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
 
 
 @pytest.fixture()

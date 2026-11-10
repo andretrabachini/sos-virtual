@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from dateutil.relativedelta import relativedelta
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
@@ -9,6 +7,8 @@ from extensoes import limiter, usuario_id_atual
 from modelos.modelos import No
 from servicos.alertas_service import alertas_ultrapassados, fotografar_alertas
 from servicos.categorizacao import detectar_categoria_com_motivo
+from servicos.contas import ContaInvalida, checar_categoria
+from servicos.tempo import hoje as hoje_local
 from servicos.financeiro import CATEGORIAS
 from servicos.parcelamento import (
     JUROS_MAX, MAX_PARCELAS, MIN_PARCELAS, criar_parcelamento, excluir_parcelamento, listar_parcelamentos,
@@ -88,8 +88,16 @@ def criar():
     elif not isinstance(categoria, str) or categoria not in CATEGORIAS:
         return erro("categoria inválida")
 
+    # um vale so paga as categorias dele
+    existente = No.query.filter_by(usuario_id=usuario_id, nome=conta, tipo="conta").first()
+    if existente:
+        try:
+            checar_categoria(usuario_id, existente, categoria)
+        except ContaInvalida as e:
+            return erro(str(e))
+
     # data da primeira parcela: padrao hoje; aceita de 24 meses atras ate 12 meses a frente
-    hoje = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    hoje = hoje_local()
     inicio = hoje
     if dados.get("data_inicio") not in (None, ""):
         inicio = data_iso(dados["data_inicio"])

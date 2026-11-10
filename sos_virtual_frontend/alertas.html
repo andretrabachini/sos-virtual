@@ -11,7 +11,7 @@
 <body data-pagina="alertas">
 <div class="app"><aside id="menu"></aside>
 <main class="conteudo">
-  <header><h1>Alertas de gastos</h1><p>Defina um limite mensal por categoria. Quando um gasto passar do limite, um aviso aparece na tela na hora.</p></header>
+  <header><h1>Alertas de gastos</h1><p>Defina um limite mensal por categoria. Quando um gasto passar do limite, um aviso aparece na tela na hora. Escolha um mês para ver como cada limite ficou.</p><div id="seletor-mes" style="margin-top:.7rem"></div></header>
   <div id="msg" class="aviso erro" hidden role="alert"></div>
   <section class="painel"><h2>Novo alerta</h2>
     <form id="form" class="form-grid">
@@ -29,7 +29,7 @@ categoria.innerHTML=CATS.map(c=>'<option>'+c+'</option>').join('');
 async function carregar(){
   try{
     aviso('msg');
-    const a=await api('/alertas');
+    const a=await api('/alertas?mes='+mesSelecionado());
     lista.innerHTML=a.length?a.map(x=>{const pct=Math.min(x.gasto_atual/x.limite*100,100);return '<div class="painel"><div class="linha"><h3>'+esc(x.categoria)+'</h3><b class="'+(x.disparado?'neg':'pos')+'">'+(x.disparado?'Limite ultrapassado':'Dentro do limite')+'</b></div>'+
       '<div class="linha" style="margin-top:.8rem"><span>'+brl(x.gasto_atual)+'</span><span class="rot">limite '+brl(x.limite)+'</span></div><div class="barra'+(x.disparado?' perigo':'')+'"><i style="width:'+pct+'%"></i></div>'+
       '<div class="acoes-linha"><button class="btn sec peq" data-tog="'+x.id+'" data-ativo="'+x.ativo+'">'+(x.ativo?'Desativar':'Ativar')+'</button><button class="btn perigo peq" data-del="'+x.id+'">Excluir</button></div></div>';}).join(''):'<p class="vazio">Nenhum alerta ainda. Crie um acima para acompanhar uma categoria.</p>';
@@ -47,5 +47,6 @@ lista.addEventListener('click',async e=>{
     else if(t.del&&confirm('Excluir este alerta?')){await api('/alertas/'+t.del,{method:'DELETE'});carregar();}
   }catch(err){aviso('msg',msgErro(err),'erro');}
 });
+montarSeletorMes(document.getElementById('seletor-mes'),carregar);
 carregar();
 </script></body></html>

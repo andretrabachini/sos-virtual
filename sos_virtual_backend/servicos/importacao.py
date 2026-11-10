@@ -3,7 +3,6 @@ grava no banco os lancamentos lidos de um extrato e projeta as parcelas futuras
 a leitura do arquivo em si fica em servicos/extratos.py
 """
 from collections import Counter, defaultdict
-from datetime import datetime
 from uuid import uuid4
 
 from dateutil.relativedelta import relativedelta
@@ -17,7 +16,9 @@ from servicos.extratos import (
     gerar_projecoes,
     limpar_descricao_parcela,
 )
+from servicos.contas import categorias_aceitas
 from servicos.financeiro import detectar_categoria
+from servicos.tempo import agora as agora_local
 
 
 def _obter_no(usuario_id, nome, tipo, cache):
@@ -77,9 +78,10 @@ def importar_lancamentos(usuario_id, lancamentos, conta, valor_e_total=False, de
     e, para compras parceladas, cria as parcelas futuras como arestas projetadas
     NAO faz commit: quem chama decide (assim, se algo falhar, nada fica pela metade)
     """
-    resumo = {"importadas": 0, "duplicadas": 0, "parceladas": [], "projecoes_criadas": 0}
+    resumo = {"importadas": 0, "duplicadas": 0, "parceladas": [], "projecoes_criadas": 0, "fora_da_regra": {}}
     cache_nos = {}
     no_conta = _obter_no(usuario_id, conta, "conta", cache_nos)
+    aceitas = categorias_aceitas(usuario_id, no_conta.id)      # vale: so algumas categorias
 
     # carrega de uma vez o que ja existe no periodo, para detectar reimportacao do mesmo extrato
     # contamos ocorrencias: duas compras iguais no mesmo dia continuam valendo as duas
@@ -116,8 +118,11 @@ def importar_lancamentos(usuario_id, lancamentos, conta, valor_e_total=False, de
             valor=valor,
             categoria=categoria,
             data=lanc["data"],
+            conta_id=no_conta.id if valor < 0 else None,       # o extrato e dessa conta; receitas nao tem conta
         ))
         resumo["importadas"] += 1
+        if valor < 0 and aceitas and categoria not in aceitas:     # importa mesmo assim (o extrato manda), mas avisa
+            resumo["fora_da_regra"][categoria] = resumo["fora_da_regra"].get(categoria, 0) + 1
 
         if parcela:
             no_categoria = _obter_no(usuario_id, categoria, "categoria", cache_nos)
@@ -140,7 +145,7 @@ def projecao_mensal(usuario_id, renda_mensal, meses):
     soma as parcelas futuras de cada um dos proximos meses
     e calcula quanto da renda continua livre depois delas
     """
-    agora = datetime.utcnow()
+    agora = agora_local()
     mes_atual = agora.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     inicio = mes_atual + relativedelta(months=1)           # o mes atual ja esta nas transacoes reais
     fim = mes_atual + relativedelta(months=meses + 1)

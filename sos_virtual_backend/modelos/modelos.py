@@ -1,6 +1,8 @@
 from database import db
 from datetime import datetime
 
+from servicos.tempo import agora
+
 
 # tabela de usuarios — guarda nome, email, senha e renda mensal
 class Usuario(db.Model):
@@ -51,11 +53,15 @@ class Transacao(db.Model):
     valor = db.Column(db.Float, nullable=False)
 
     categoria = db.Column(db.String(80), default="Outros")
-    data = db.Column(db.DateTime, default=datetime.utcnow)
+    data = db.Column(db.DateTime, default=agora)
+
+    # conta ou cartao em que a compra foi paga (vazio = ainda sem conta definida; o otimizador decide)
+    conta_id = db.Column(db.Integer, db.ForeignKey("nos.id", ondelete="SET NULL"), nullable=True, index=True)
 
     def para_dict(self):
         return {
             "id": self.id,
+            "conta_id": self.conta_id,
             "descricao": self.descricao,
             "valor": self.valor,
             "categoria": self.categoria,
@@ -165,7 +171,7 @@ class Aresta(db.Model):
 
     # valor em R$ (sempre positivo; a direcao ja diz quem paga e quem recebe)
     peso = db.Column(db.Numeric(12, 2, asdecimal=False), nullable=False)
-    data = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    data = db.Column(db.DateTime, default=agora, index=True)
     descricao = db.Column(db.String(255))
 
     # True = parcela futura ainda nao paga (projecao); False = movimento real

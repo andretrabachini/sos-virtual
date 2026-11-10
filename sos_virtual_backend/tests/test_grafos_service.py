@@ -221,3 +221,103 @@ def test_otimo_igual_ao_da_programacao_linear_com_restricoes():
             assert not dono["categorias"] or p["categoria"] in dono["categorias"]
         for cat in cats:
             assert sum(p["valor"] for p in r["plano"] if p["categoria"] == cat) <= despesas[cat] + 0.005
+
+
+# ------------------------------------------- compras ja registradas em uma conta (fixos)
+def fixo(conta_id, categoria, valor):
+    return {"conta_id": conta_id, "categoria": categoria, "valor": valor}
+
+
+def registrado_em(resultado, nome):
+    return next(n["usado_registrado"] for n in resultado["nos"] if n["tipo"] == "conta" and n["nome"] == nome)
+
+
+def test_o_que_ja_foi_pago_consome_o_limite_da_conta():
+    cartao = conta(3, "Cartão Cashback", 1000, -2.0)
+    r = otimizar([cartao, CORRENTE()], {"Moradia": 1600}, fixos=[fixo(3, "Alimentação", 400)])
+    assert registrado_em(r, "Cartão Cashback") == 400
+    assert pago_por(r, "Cartão Cashback", "Moradia") == 600            # so sobraram R$ 600 do limite de R$ 1.000
+    assert usado(r, "Cartão Cashback") == 1000 and pago_por(r, "Conta Corrente") == 1000
+
+
+def test_beneficio_separa_registrado_e_sugerido():
+    r = otimizar([conta(3, "Cartão Cashback", 1000, -2.0), CORRENTE()], {"Moradia": 1600}, fixos=[fixo(3, "Alimentação", 400)])
+    assert r["beneficio_registrado"] == 8.0 and r["beneficio_sugerido"] == 12.0 and r["beneficio_total"] == 20.0
+
+
+def test_totais_somam_o_registrado_e_o_pendente():
+    r = otimizar([conta(3, "Cartão", 5000), CORRENTE()], {"Moradia": 1600}, fixos=[fixo(3, "Alimentação", 400), fixo(3, "Lazer", 100)])
+    assert (r["total_registrado"], r["total_pendente"], r["total_despesas"]) == (500.0, 1600.0, 2100.0)
+
+
+def test_so_compras_registradas_nada_a_sugerir():
+    r = otimizar([conta(3, "Cartão", 5000, -1.0)], {}, fixos=[fixo(3, "Alimentação", 400)])
+    assert r["status"] == "sucesso" and r["plano"] == [] and r["beneficio_total"] == 4.0
+    assert r["registrados"][0]["conta"] == "Cartão" and "já estão registradas" in r["mensagem"]
+
+
+def test_nenhuma_despesa_continua_vazio():
+    assert otimizar([CORRENTE()], {}, fixos=[])["status"] == "vazio"
+
+
+def test_vale_com_parte_do_saldo_ja_usada():
+    r = otimizar([VALE(800), CORRENTE()], {"Alimentação": 1000}, fixos=[fixo(1, "Alimentação", 300)])
+    assert pago_por(r, "Vale Alimentação", "Alimentação") == 500       # os R$ 300 ja pagos saem do saldo de R$ 800
+    assert pago_por(r, "Conta Corrente", "Alimentação") == 500
+    assert usado(r, "Vale Alimentação") == 800
+
+
+def test_conta_que_passou_do_limite_nao_recebe_mais_nada_e_e_sinalizada():
+    r = otimizar([conta(3, "Cartão", 500, -2.0), CORRENTE()], {"Moradia": 1000}, fixos=[fixo(3, "Lazer", 700)])
+    assert r["excedeu_limite"] == [{"conta": "Cartão", "excedeu": 200.0}]
+    assert r["status"] == "sucesso" and pago_por(r, "Cartão") == 0 and pago_por(r, "Conta Corrente") == 1000
+
+
+def test_compra_fora_das_categorias_do_vale_e_respeitada_e_avisada():
+    r = otimizar([VALE(800), CORRENTE()], {"Moradia": 100}, fixos=[fixo(1, "Moradia", 150)])
+    assert r["fora_da_regra"] == [{"conta": "Vale Alimentação", "categoria": "Moradia", "valor": 150.0}]
+    assert r["registrados"][0]["categoria"] == "Moradia"               # a realidade manda: nao e apagada nem recusada
+
+
+def test_conta_sem_limite_com_compras_registradas():
+    r = otimizar([conta(3, "Cartão", None, -1.0)], {"Lazer": 200}, fixos=[fixo(3, "Alimentação", 300)])
+    assert r["status"] == "sucesso" and registrado_em(r, "Cartão") == 300 and pago_por(r, "Cartão", "Lazer") == 200
+
+
+def test_compra_em_conta_que_nao_existe_mais_e_ignorada():
+    r = otimizar([CORRENTE()], {"Moradia": 100}, fixos=[fixo(99, "Lazer", 500)])
+    assert r["total_registrado"] == 0.0 and r["status"] == "sucesso"
+
+
+def test_gargalo_considera_o_que_ja_foi_pago():
+    r = otimizar([conta(3, "Cartão", 1000)], {"Moradia": 500}, fixos=[fixo(3, "Lazer", 900)])
+    assert r["status"] == "gargalo" and r["falta"] == 400.0 and "ainda está sem conta" in r["mensagem"]
+
+
+def test_arestas_marcam_se_sao_registradas_ou_sugeridas():
+    r = otimizar([conta(3, "Cartão", 5000), CORRENTE()], {"Moradia": 100}, fixos=[fixo(3, "Lazer", 50)])
+    assert {a["tipo"] for a in r["arestas"]} == {"registrado", "sugerido"}
+    lazer = next(n for n in r["nos"] if n["id"] == "cat:Lazer")
+    assert (lazer["registrado"], lazer["pendente"], lazer["valor"]) == (50.0, 0.0, 50.0)
+    moradia = next(n for n in r["nos"] if n["id"] == "cat:Moradia")
+    assert (moradia["registrado"], moradia["pendente"]) == (0.0, 100.0)
+
+
+def test_registrar_e_sugerir_equivale_a_reduzir_o_limite():
+    """a sugestao com compras ja registradas e igual a otimizar com o limite ja reduzido (que ja foi validado contra programacao linear)"""
+    rnd = random.Random(5)
+    cats = ["Alimentação", "Transporte", "Saúde", "Lazer", "Moradia"]
+    for _ in range(200):
+        contas = [conta(i + 1, f"C{i}", rnd.choice([None, round(rnd.uniform(500, 3000), 2)]), rnd.choice([0, -1, -2, 1.5]),
+                        rnd.sample(cats, rnd.randint(1, 2)) if rnd.random() < 0.4 else None) for i in range(rnd.randint(1, 4))]
+        despesas = {c: round(rnd.uniform(10, 900), 2) for c in rnd.sample(cats, rnd.randint(1, 4))}
+        fixos = [fixo(rnd.choice(contas)["id"], rnd.choice(cats), round(rnd.uniform(10, 300), 2)) for _ in range(rnd.randint(0, 4))]
+        com_fixos = otimizar(contas, despesas, fixos)
+        gasto = {}
+        for f in fixos:
+            gasto[f["conta_id"]] = gasto.get(f["conta_id"], 0) + f["valor"]
+        reduzidas = [{**c, "capacidade": None if c["capacidade"] is None else max(0, round(c["capacidade"] - gasto.get(c["id"], 0), 2))} for c in contas]
+        sem_fixos = otimizar(reduzidas, despesas)
+        assert com_fixos["status"] == sem_fixos["status"]
+        assert sorted((p["conta_id"], p["categoria"], p["valor"]) for p in com_fixos["plano"]) == sorted((p["conta_id"], p["categoria"], p["valor"]) for p in sem_fixos["plano"])
+        assert com_fixos["beneficio_sugerido"] == sem_fixos["beneficio_total"]

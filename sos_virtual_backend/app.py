@@ -138,6 +138,9 @@ if __name__ == "__main__":
     with app.app_context():
         # cria as tabelas no banco se ainda nao existirem
         db.create_all()
+        from servicos.migracoes import aplicar_migracoes
+        for novidade in aplicar_migracoes(db):
+            print(f"banco atualizado: criada a coluna {novidade}")
         print("banco de dados pronto")
 
     # debug so liga se o .env pedir (FLASK_DEBUG=1), e o servidor so escuta

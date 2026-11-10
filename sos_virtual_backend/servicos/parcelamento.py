@@ -10,7 +10,6 @@ regras
 """
 import hashlib
 from collections import defaultdict
-from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
 from uuid import uuid4
 
@@ -18,6 +17,7 @@ from dateutil.relativedelta import relativedelta
 
 from database import db
 from servicos.extratos import limpar_descricao_parcela
+from servicos.tempo import agora as agora_local
 from modelos.modelos import Aresta, No, Parcelamento, Transacao
 
 MIN_PARCELAS, MAX_PARCELAS = 2, 36
@@ -61,7 +61,7 @@ def datas_das_parcelas(inicio, parcelas):
 
 
 def _inicio_do_proximo_mes():
-    agora = datetime.utcnow()
+    agora = agora_local()
     return agora.replace(day=1, hour=0, minute=0, second=0, microsecond=0) + relativedelta(months=1)
 
 
@@ -92,7 +92,7 @@ def criar_parcelamento(usuario_id, descricao, valor_vista, parcelas, juros_mensa
         descricao_k = f"{descricao} ({k}/{parcelas})"
         if data < limite:
             db.session.add(Transacao(usuario_id=usuario_id, descricao=descricao_k, valor=-valor,
-                                     categoria=categoria, data=data))
+                                     categoria=categoria, data=data, conta_id=no_conta.id))
             lancadas += 1
         else:
             db.session.add(Aresta(

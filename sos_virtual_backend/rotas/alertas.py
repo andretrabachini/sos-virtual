@@ -1,11 +1,12 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
 
 from database import db
 from extensoes import usuario_id_atual
 from modelos.modelos import Alerta
 from servicos.financeiro import CATEGORIAS, gastos_por_categoria
-from validacao import VALOR_MAX, corpo_json, erro, numero
+from servicos.tempo import mes_atual
+from validacao import VALOR_MAX, corpo_json, erro, mes_valido, numero
 
 alertas_bp = Blueprint("alertas", __name__, url_prefix="/api/alertas")
 
@@ -15,10 +16,14 @@ alertas_bp = Blueprint("alertas", __name__, url_prefix="/api/alertas")
 def listar():
     usuario_id = usuario_id_atual()
 
+    mes = request.args.get("mes") or mes_atual()
+    if not mes_valido(mes):
+        return erro("mês inválido (use o formato AAAA-MM)")
+
     alertas = Alerta.query.filter_by(usuario_id=usuario_id).all()
 
-    # pega os gastos do mes para verificar se algum alerta foi disparado
-    gastos = gastos_por_categoria(usuario_id)
+    # pega os gastos do mes escolhido para verificar se algum alerta foi disparado
+    gastos = gastos_por_categoria(usuario_id, mes)
 
     resultado = []
     for a in alertas:

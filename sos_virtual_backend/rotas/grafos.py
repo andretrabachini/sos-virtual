@@ -1,15 +1,16 @@
 from collections import defaultdict
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
 from sqlalchemy.exc import IntegrityError
 
 from database import db
 from extensoes import limiter, usuario_id_atual
-from modelos.modelos import Aresta, ContaCategoria, No
-from servicos.financeiro import CATEGORIAS, gastos_por_categoria
+from modelos.modelos import Aresta, ContaCategoria, No, Parcelamento, Transacao
+from servicos.financeiro import CATEGORIAS, limites_do_mes
 from servicos.grafos_service import calcular_roteamento_otimizado
-from validacao import VALOR_MAX, corpo_json, erro, numero, texto
+from servicos.tempo import mes_atual
+from validacao import VALOR_MAX, corpo_json, erro, mes_valido, numero, texto
 
 grafos_bp = Blueprint("grafos", __name__, url_prefix="/api")
 
@@ -146,9 +147,12 @@ def editar_conta(conta_id):
         if No.query.filter_by(usuario_id=usuario_id, tipo="conta", nome=campos["nome"]).first():
             return erro("já existe uma conta com esse nome", 409)
 
+    nome_antigo = conta.nome
     for campo in ("nome", "capacidade", "custo"):
         if campo in campos:
             setattr(conta, campo, campos[campo])
+    if "nome" in campos and campos["nome"] != nome_antigo:
+        Parcelamento.query.filter_by(usuario_id=usuario_id, conta=nome_antigo).update({"conta": campos["nome"]}, synchronize_session=False)
     if "categorias" in campos:
         _gravar_categorias(usuario_id, conta.id, campos["categorias"])
     try:
@@ -168,6 +172,8 @@ def excluir_conta(conta_id):
     # as categorias aceitas e as parcelas futuras projetadas a partir dessa conta saem junto (a chave estrangeira exige)
     ContaCategoria.query.filter_by(usuario_id=usuario_id, conta_id=conta.id).delete(synchronize_session=False)
     Aresta.query.filter_by(usuario_id=usuario_id, origem_id=conta.id).delete(synchronize_session=False)
+    # as compras pagas nessa conta continuam existindo, so ficam "sem conta" de novo
+    Transacao.query.filter_by(usuario_id=usuario_id, conta_id=conta.id).update({"conta_id": None}, synchronize_session=False)
     db.session.delete(conta)
     db.session.commit()
     return jsonify({"mensagem": "conta removida"})
@@ -175,22 +181,55 @@ def excluir_conta(conta_id):
 
 # ------------------------------------------------------------------ grafo e otimizacao
 
-def _calcular(usuario_id, despesas):
+def _movimentos_do_mes(usuario_id, mes):
+    """
+    despesas do mes separadas em: ja registradas em uma conta (fixos) e ainda sem conta (pendentes).
+    so as pendentes sao otimizadas; as registradas ja aconteceram e consomem o limite da conta
+    """
+    inicio, fim = limites_do_mes(mes)
+    fixos, pendentes = defaultdict(float), defaultdict(float)
+    for t in Transacao.query.filter(Transacao.usuario_id == usuario_id, Transacao.data >= inicio,
+                                    Transacao.data < fim, Transacao.valor < 0).all():
+        if t.conta_id:
+            fixos[(t.conta_id, t.categoria)] += -t.valor
+        else:
+            pendentes[t.categoria] += -t.valor
+    return ([{"conta_id": c, "categoria": k, "valor": round(v, 2)} for (c, k), v in fixos.items()],
+            {k: round(v, 2) for k, v in pendentes.items()})
+
+
+def _calcular(usuario_id, mes, despesas=None):
+    """despesas=None usa o que esta sem conta no mes; um dict simula outros valores para essa parte"""
     mapa = _categorias_por_conta(usuario_id)
     contas = [
         {"id": c.id, "nome": c.nome, "capacidade": c.capacidade, "custo": c.custo or 0.0,
          "categorias": mapa.get(c.id, [])}
         for c in _contas_do_usuario(usuario_id)
     ]
-    return calcular_roteamento_otimizado(contas, despesas)
+    fixos, pendentes = _movimentos_do_mes(usuario_id, mes)
+    resultado = calcular_roteamento_otimizado(contas, pendentes if despesas is None else despesas, fixos)
+
+    registradas = defaultdict(float)
+    for f in fixos:
+        registradas[f["categoria"]] += f["valor"]
+    resultado.update({"mes": mes, "pendentes": pendentes, "registradas": {k: round(v, 2) for k, v in registradas.items()}})
+    return resultado
+
+
+def _mes_da_requisicao(valor):
+    mes = valor or mes_atual()
+    return (mes, None) if mes_valido(mes) else (None, "mês inválido (use o formato AAAA-MM)")
 
 
 @grafos_bp.route("/grafo", methods=["GET"])
 @jwt_required()
 def grafo():
-    """melhor forma de pagar as despesas do mes atual (alimenta o mapa do painel)"""
+    """caminho do dinheiro de um mes (?mes=AAAA-MM; padrao: o atual): o que ja foi pago em cada conta + sugestao para o resto"""
     usuario_id = usuario_id_atual()
-    return jsonify(_calcular(usuario_id, gastos_por_categoria(usuario_id)))
+    mes, mensagem = _mes_da_requisicao(request.args.get("mes"))
+    if mes is None:
+        return erro(mensagem)
+    return jsonify(_calcular(usuario_id, mes))
 
 
 @grafos_bp.route("/grafo/otimizar", methods=["POST"])
@@ -198,18 +237,22 @@ def grafo():
 @limiter.limit("60 per hour")
 def otimizar():
     """
-    mesmo calculo, mas com valores informados pelo usuario (simulacao):
-      {"despesas": {"Aluguel": 1600, "Alimentação": 900}}
-    sem o campo "despesas", usa os gastos do mes atual
+    mesmo calculo, mas com valores informados pelo usuario (simulacao) para a parte que ainda esta sem conta:
+      {"mes": "2026-10", "despesas": {"Aluguel": 1600, "Alimentação": 900}}
+    sem "despesas", usa o que esta sem conta no mes; sem "mes", o mes atual
     """
     usuario_id = usuario_id_atual()
     dados = corpo_json()
     if dados is None:
         return erro("corpo da requisição inválido")
 
+    mes, mensagem = _mes_da_requisicao(dados.get("mes"))
+    if mes is None:
+        return erro(mensagem)
+
     informadas = dados.get("despesas")
     if informadas is None:
-        despesas = gastos_por_categoria(usuario_id)
+        despesas = None
     else:
         if not isinstance(informadas, dict) or len(informadas) > len(CATEGORIAS):
             return erro("'despesas' deve ser um objeto categoria -> valor")
@@ -222,4 +265,4 @@ def otimizar():
                 return erro(f"valor inválido em {categoria} (número entre zero e o máximo permitido)")
             despesas[categoria] = valor
 
-    return jsonify(_calcular(usuario_id, despesas))
+    return jsonify(_calcular(usuario_id, mes, despesas))

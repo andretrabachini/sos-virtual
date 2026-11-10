@@ -37,12 +37,12 @@
       <div class="campo"><label for="tipo">Tipo</label><select id="tipo"><option value="despesa">Despesa</option><option value="receita">Receita</option></select></div>
       <div class="campo" id="boxforma"><label for="forma">Forma de pagamento</label><select id="forma"><option value="vista">À vista</option><option value="parcelado">Parcelado</option></select></div>
       <div class="campo"><label for="categoria">Categoria</label><select id="categoria"></select></div>
+      <div class="campo" id="boxconta"><label for="pcontasel">Cartão ou conta</label><select id="pcontasel"></select><input id="pconta" maxlength="100" placeholder="Nome da nova conta ou cartão" autocomplete="off" hidden style="margin-top:.5rem"><div class="rot" style="margin-top:.3rem">Opcional. Sem conta, o Otimizador sugere onde pagar.</div></div>
+      <div class="campo"><label for="tdata" id="rotdata">Data da compra</label><input type="date" id="tdata" required></div>
       <div id="boxparc" style="grid-column:1/-1" hidden>
         <div class="form-grid">
           <div class="campo"><label for="pparc">Número de parcelas</label><input type="number" id="pparc" min="2" max="36" step="1" placeholder="Ex.: 10"></div>
           <div class="campo"><label for="pjuros">Juros ao mês (%)</label><input type="number" id="pjuros" min="0" max="30" step="0.01" placeholder="0 = sem juros"></div>
-          <div class="campo"><label for="pcontasel">Cartão ou conta</label><select id="pcontasel"></select><input id="pconta" maxlength="100" placeholder="Nome da nova conta ou cartão" autocomplete="off" hidden style="margin-top:.5rem"></div>
-          <div class="campo"><label for="pdata">Data da 1ª parcela</label><input type="date" id="pdata"></div>
         </div>
         <div class="rot" id="previaparc" aria-live="polite" style="margin:-.3rem 0 1rem"></div>
         <p class="rot" style="margin:0 0 1rem">A 1ª parcela entra nas transações do mês. As seguintes aparecem como parcelas futuras no painel, uma por mês.</p>
@@ -52,7 +52,7 @@
     <div id="resparc" class="aviso" hidden role="status" style="margin:1rem 0 0"></div>
   </section>
   <section class="painel"><h2>Importar extrato</h2>
-    <p class="rot" style="margin-bottom:1rem">Envie o extrato do banco ou a fatura do cartão em CSV ou OFX (até 2 MB). Compras parceladas, como "PARC 02/05", são reconhecidas e as parcelas futuras aparecem na projeção do painel. O arquivo é lido na hora e não fica guardado: só os lançamentos entram no sistema.</p>
+    <p class="rot" style="margin-bottom:1rem">Envie o extrato do banco ou a fatura do cartão em CSV ou OFX (até 2 MB). Compras parceladas, como "PARC 02/05", são reconhecidas e as parcelas futuras aparecem na projeção do painel. O arquivo é lido na hora e não fica guardado: só os lançamentos entram no sistema, todos associados à conta escolhida abaixo.</p>
     <form id="formimp" class="form-grid">
       <div class="campo larga"><label for="arquivo">Arquivo do extrato (CSV ou OFX)</label><input type="file" id="arquivo" accept=".csv,.ofx,.qfx" required></div>
       <div class="campo larga"><label for="contasel">Conta ou cartão</label><select id="contasel"></select><input id="conta" maxlength="100" placeholder="Nome da nova conta ou cartão" autocomplete="off" hidden style="margin-top:.5rem"></div>
@@ -69,8 +69,8 @@
     <p class="rot" style="margin-bottom:1rem">Compras que ainda têm parcelas a vencer: as que você registrou aqui (parcelado) e as reconhecidas nos extratos importados (ex.: "PARC 02/05"). São elas que formam a projeção de parcelas do painel.</p>
     <div class="tabela-rolavel"><table><thead><tr><th>Compra</th><th>Cartão ou conta</th><th>Parcelas</th><th>Valor da parcela</th><th>Falta pagar</th><th>Próxima</th><th></th></tr></thead><tbody id="listaparc"></tbody></table></div>
   </section>
-  <section class="painel"><div class="filtro"><h2>Histórico</h2><label class="rot">Mês <input type="month" id="mesf"></label></div>
-    <table><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th><th></th></tr></thead><tbody id="tb"></tbody></table>
+  <section class="painel"><div class="filtro"><h2>Histórico</h2><div id="seletor-mes-hist"></div></div>
+    <table><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Conta</th><th>Valor</th><th></th></tr></thead><tbody id="tb"></tbody></table>
   </section>
 </main></div>
 <script src="js/app.js"></script>
@@ -99,13 +99,16 @@ function sugerir(){
 descricao.addEventListener('input',sugerir);categoria.addEventListener('change',sugerir);
 tipo.addEventListener('change',()=>{montarCategorias();sugerir();});
 montarCategorias();
-const hoje=new Date();mesf.value=hoje.getFullYear()+'-'+String(hoje.getMonth()+1).padStart(2,'0');
+// conta onde a compra foi paga (editável no histórico): "Sem conta" deixa o Otimizador decidir
+const optsConta=atual=>{const lista=nomesContas.includes(atual)||!atual?nomesContas:[atual].concat(nomesContas);
+  return '<option value=""'+(atual?'':' selected')+'>Sem conta</option>'+lista.map(n=>'<option'+(n===atual?' selected':'')+'>'+esc(n)+'</option>').join('');};
+const selConta=t=>t.valor<0?'<select class="cat-sel" data-conta-id="'+t.id+'" aria-label="Conta de '+esc(t.descricao)+'">'+optsConta(t.conta)+'</select>':'<span class="rot">—</span>';
 async function carregar(){try{
   aviso('msg');
   const l=await api('/transacoes?mes='+mesf.value);
   const r=l.filter(t=>t.valor>0).reduce((s,t)=>s+t.valor,0),d=l.filter(t=>t.valor<0).reduce((s,t)=>s-t.valor,0);
   rec.textContent=brl(r);des.textContent=brl(d);sal.textContent=brl(r-d);sal.className='num '+(r-d<0?'neg':'pos');
-  tb.innerHTML=l.length?l.map(t=>'<tr><td>'+new Date(t.data).toLocaleDateString('pt-BR')+'</td><td>'+esc(t.descricao)+'</td><td><select class="cat-sel" data-cat-id="'+t.id+'" aria-label="Categoria de '+esc(t.descricao)+'">'+optsLinha(catsDo(t.valor),t.categoria)+'</select></td><td class="'+(t.valor>0?'pos':'neg')+'">'+(t.valor>0?'+':'−')+brl(Math.abs(t.valor))+'</td><td><button class="btn perigo peq" data-del="'+t.id+'">Excluir</button></td></tr>').join(''):'<tr><td colspan="5" class="vazio">Nenhuma transação neste mês.</td></tr>';
+  tb.innerHTML=l.length?l.map(t=>'<tr><td>'+new Date(t.data).toLocaleDateString('pt-BR')+'</td><td>'+esc(t.descricao)+'</td><td><select class="cat-sel" data-cat-id="'+t.id+'" aria-label="Categoria de '+esc(t.descricao)+'">'+optsLinha(catsDo(t.valor),t.categoria)+'</select></td><td>'+selConta(t)+'</td><td class="'+(t.valor>0?'pos':'neg')+'">'+(t.valor>0?'+':'−')+brl(Math.abs(t.valor))+'</td><td><button class="btn perigo peq" data-del="'+t.id+'">Excluir</button></td></tr>').join(''):'<tr><td colspan="6" class="vazio">Nenhuma transação neste mês.</td></tr>';
 }catch(e){aviso('msg',msgErro(e),'erro');}}
 // ---------- compra parcelada: forma de pagamento, prévia e envio ----------
 const hojeISO=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
@@ -114,6 +117,7 @@ function atualizarForma(){
   boxforma.hidden=rec;if(rec)forma.value='vista';
   const parc=!rec&&forma.value==='parcelado';
   boxparc.hidden=!parc;pparc.required=parc;
+  boxconta.hidden=rec;rotdata.textContent=parc?'Data da 1ª parcela':'Data da compra';
   rotvalor.textContent=parc?'Valor da compra à vista (R$)':'Valor (R$)';
   previa();
 }
@@ -131,7 +135,7 @@ function previa(){
         ' · total '+brl(r.valor_total)+(r.juros_total>0?' · juros de <b class="neg">'+brl(r.juros_total)+'</b>':' · sem juros');
     }catch(e){if(minha===seqPrev)previaparc.textContent=e instanceof TypeError?'':e.message;}},350);
 }
-function restaurarForm(){montarCategorias();sugerir();pdata.value=hojeISO();atualizarForma();montarSelecaoConta(pcontasel,pconta);}
+function restaurarForm(){montarCategorias();sugerir();tdata.value=hojeISO();atualizarForma();montarSelecaoConta(pcontasel,pconta,true);}
 [valor,pparc,pjuros].forEach(el=>el.addEventListener('input',previa));
 forma.addEventListener('change',atualizarForma);
 tipo.addEventListener('change',atualizarForma);
@@ -146,20 +150,24 @@ form.addEventListener('submit',async e=>{e.preventDefault();
   try{
     if(tipo.value==='despesa'&&forma.value==='parcelado'){
       const nomeConta=nomeEscolhido(pcontasel,pconta);
+      if(pcontasel.value==='')return aviso('msg','Escolha em qual cartão ou conta foi a compra parcelada.','erro');
       if(!nomeConta)return aviso('msg','Digite o nome da nova conta ou cartão.','erro');
-      const r=await api('/parcelamentos',{method:'POST',body:JSON.stringify({descricao:descricao.value.trim(),valor_vista:v,parcelas:parseInt(pparc.value,10),juros_mensal:parseFloat(pjuros.value)||0,conta:nomeConta,categoria:categoria.value||undefined,data_inicio:pdata.value||undefined})});
+      const r=await api('/parcelamentos',{method:'POST',body:JSON.stringify({descricao:descricao.value.trim(),valor_vista:v,parcelas:parseInt(pparc.value,10),juros_mensal:parseFloat(pjuros.value)||0,conta:nomeConta,categoria:categoria.value||undefined,data_inicio:tdata.value||undefined})});
       resumoParc(r);form.reset();restaurarForm();carregar();carregarParcelas();atualizarContas();avisarContasMudaram();mostrarAlertas(r.alertas);
     }else{
-      const r=await api('/transacoes',{method:'POST',body:JSON.stringify({descricao:descricao.value.trim(),valor:tipo.value==='despesa'?-v:v,categoria:categoria.value||undefined})});
-      form.reset();restaurarForm();carregar();mostrarAlertas(r.alertas);
+      const despesa=tipo.value==='despesa',nomeConta=despesa?nomeEscolhido(pcontasel,pconta):'';
+      if(despesa&&pcontasel.value===NOVA&&!nomeConta)return aviso('msg','Digite o nome da nova conta ou cartão.','erro');
+      const r=await api('/transacoes',{method:'POST',body:JSON.stringify({descricao:descricao.value.trim(),valor:despesa?-v:v,categoria:categoria.value||undefined,conta:nomeConta||undefined,data:tdata.value||undefined})});
+      form.reset();restaurarForm();carregar();if(nomeConta){atualizarContas();avisarContasMudaram();}mostrarAlertas(r.alertas);
     }
   }catch(err){aviso('msg',msgErro(err),'erro');}});
-tb.addEventListener('change',async e=>{const s=e.target;if(!s.dataset.catId)return;
-  try{const r=await api('/transacoes/'+s.dataset.catId,{method:'PUT',body:JSON.stringify({categoria:s.value})});carregar();mostrarAlertas(r.alertas);}
+tb.addEventListener('change',async e=>{const s=e.target,id=s.dataset.catId||s.dataset.contaId;if(!id)return;
+  const corpo=s.dataset.catId?{categoria:s.value}:{conta:s.value};                    // "" = sem conta
+  try{const r=await api('/transacoes/'+id,{method:'PUT',body:JSON.stringify(corpo)});carregar();mostrarAlertas(r.alertas);}
   catch(err){await carregar();aviso('msg',msgErro(err),'erro');}});   // em caso de erro volta ao valor salvo e mostra o motivo
 tb.addEventListener('click',async e=>{const id=e.target.dataset.del;
   if(id&&confirm('Excluir esta transação?'))try{await api('/transacoes/'+id,{method:'DELETE'});carregar();}catch(err){aviso('msg',msgErro(err),'erro');}});
-mesf.addEventListener('change',carregar);carregar();
+montarSeletorMes(document.getElementById('seletor-mes-hist'),()=>carregar(),{id:'mesf'});
 
 // ---------- importação de extrato ----------
 function resumoImp(r){
@@ -170,7 +178,9 @@ function resumoImp(r){
     +r.parceladas.map(p=>'<li>'+esc(p.descricao)+' — parcela '+esc(p.parcela)+' de '+brl(p.valor_parcela)+' ('+p.projecoes_criadas+' parcela(s) futura(s) projetada(s))</li>').join('')+'</ul>';
   if(r.erros&&r.erros.length)h+='<p class="rot" style="margin-top:.6rem">Linhas ignoradas: '
     +r.erros.map(x=>'linha '+x.linha+' ('+esc(x.motivo)+')').join(', ')+(r.linhas_com_erro>r.erros.length?' e outras.':'.')+'</p>';
-  h+='<p class="rot" style="margin-top:.6rem">Os lançamentos aparecem no histórico do mês em que foram feitos: use o filtro de mês para ver os de outros meses.</p>';
+  const fr=Object.entries(r.fora_da_regra||{});
+  if(fr.length)h+='<p style="margin-top:.6rem"><b>Atenção:</b> este extrato tem lançamentos em categorias que essa conta normalmente não aceita: '+fr.map(([c,n])=>esc(c)+' ('+n+')').join(', ')+'. Foram importados mesmo assim.</p>';
+  h+='<p class="rot" style="margin-top:.6rem">Os lançamentos aparecem no histórico do mês em que foram feitos: use o seletor de mês para ver os de outros meses.</p>';
   resimp.innerHTML=h;resimp.hidden=false;
 }
 formimp.addEventListener('submit',async e=>{e.preventDefault();
@@ -212,16 +222,19 @@ listaparc.addEventListener('click',async e=>{const d=e.target.dataset;if(!d.delp
 // ---------- cartões e contas: a lista se atualiza sozinha ----------
 const NOVA='__nova__';
 let nomesContas=[];
-function montarSelecaoConta(sel,novo){
-  const atual=sel.value,lista=nomesContas.length?nomesContas:['Conta Principal'];
-  sel.innerHTML=lista.map(n=>'<option>'+esc(n)+'</option>').join('')+'<option value="'+NOVA+'">+ Nova conta ou cartão…</option>';
-  sel.value=[...sel.options].some(o=>o.value===atual)&&atual?atual:(lista.includes('Conta Principal')?'Conta Principal':lista[0]);
+function montarSelecaoConta(sel,novo,comVazio){
+  const atual=sel.value,lista=nomesContas.length||comVazio?nomesContas:['Conta Principal'];
+  sel.innerHTML=(comVazio?'<option value="">Sem conta definida</option>':'')+lista.map(n=>'<option>'+esc(n)+'</option>').join('')+'<option value="'+NOVA+'">+ Nova conta ou cartão…</option>';
+  const existe=[...sel.options].some(o=>o.value===atual);
+  sel.value=existe&&(atual||comVazio)?atual:(comVazio?'':(lista.includes('Conta Principal')?'Conta Principal':lista[0]));
   novo.hidden=sel.value!==NOVA;
 }
 const nomeEscolhido=(sel,novo)=>sel.value===NOVA?novo.value.trim():sel.value;
-async function atualizarContas(){
+async function atualizarContas(recarregar=true){
+  const antes=JSON.stringify(nomesContas);
   try{nomesContas=(await api('/contas')).map(c=>c.nome);}catch(e){return;}
-  montarSelecaoConta(pcontasel,pconta);montarSelecaoConta(contasel,conta);
+  montarSelecaoConta(pcontasel,pconta,true);montarSelecaoConta(contasel,conta);
+  if(recarregar&&JSON.stringify(nomesContas)!==antes)carregar();                  // o histórico oferece as contas para escolher
 }
 const avisarContasMudaram=()=>{try{localStorage.setItem('sosv_contas_mudou',String(Date.now()));}catch(e){}};   // as outras abas ouvem isto
 [[pcontasel,pconta],[contasel,conta]].forEach(([sel,novo])=>sel.addEventListener('change',()=>{novo.hidden=sel.value!==NOVA;if(!novo.hidden)novo.focus();}));
@@ -229,6 +242,6 @@ let tContas=null;const agendarContas=()=>{clearTimeout(tContas);tContas=setTimeo
 window.addEventListener('focus',agendarContas);                                                       // voltou para esta aba/janela
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)agendarContas();});
 window.addEventListener('storage',e=>{if(e.key==='sosv_contas_mudou')agendarContas();});            // outra aba (ex.: Otimizador) mudou as contas
-atualizarContas();
 restaurarForm();carregarParcelas();
+atualizarContas(false).then(()=>carregar());   // primeiro as contas, para o histórico já mostrar a coluna certa
 </script></body></html>
