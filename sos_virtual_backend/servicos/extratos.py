@@ -1,20 +1,28 @@
 """
-leitura de extratos bancarios (CSV e OFX) e deteccao de compras parceladas
+leitura de extratos bancarios e planilhas (CSV, OFX e XLSX) e deteccao de compras parceladas
 aqui ficam so funcoes puras (sem banco de dados), faceis de testar
+
+colunas reconhecidas em CSV e XLSX (maiusculas e acentos nao importam; o nome pode variar um pouco):
+  obrigatorias: data, descricao (ou historico, lancamento...), valor
+  opcionais:    tipo (Despesa/Receita), categoria, conta (nome do cartao ou conta)
 """
 import csv
 import html
 import io
 import re
 import unicodedata
-from datetime import datetime
+import zipfile
+from datetime import date, datetime, timedelta
 
 from dateutil.relativedelta import relativedelta
 
 from validacao import VALOR_MAX
 
-LIMITE_LINHAS = 1000   # maximo de lancamentos por arquivo
-MAX_PARCELAS = 36      # acima disso tratamos como falso positivo (ex.: "05/12" sendo data)
+LIMITE_LINHAS = 1000            # maximo de lancamentos por arquivo
+MAX_PARCELAS = 36               # acima disso tratamos como falso positivo (ex.: "05/12" sendo data)
+MAX_DESCOMPACTADO = 30 * 1024 * 1024   # .xlsx e um zip: limita o tamanho DEPOIS de descompactado (protege de "zip bomb")
+MAX_ARQUIVOS_ZIP = 300
+EXCEL_BASE = datetime(1899, 12, 30)    # as datas do Excel sao contadas em dias a partir daqui
 
 
 class ExtratoInvalido(Exception):
@@ -40,25 +48,50 @@ FORMATOS_DATA = ("%d/%m/%Y", "%d/%m/%y", "%Y-%m-%d", "%d-%m-%Y", "%d.%m.%Y")
 
 
 def parse_data(texto):
-    """aceita dd/mm/aaaa, dd/mm/aa, aaaa-mm-dd e variacoes; devolve datetime ou None"""
-    t = str(texto).strip()
-    if not t:
+    """
+    aceita dd/mm/aaaa, dd/mm/aa, aaaa-mm-dd e variacoes; e tambem o que vem de planilhas Excel:
+    datas de verdade (datetime/date) e o numero de serie do Excel (ex.: 46309). devolve datetime ou None
+    """
+    if isinstance(texto, bool):
         return None
-    t = re.split(r"[ T]", t, maxsplit=1)[0]  # descarta a hora, se houver
-    for formato in FORMATOS_DATA:
-        try:
-            data = datetime.strptime(t, formato)
-        except ValueError:
-            continue
-        return data if 1990 <= data.year <= 2100 else None
-    return None
+    if isinstance(texto, datetime):
+        data = texto.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+    elif isinstance(texto, date):
+        data = datetime(texto.year, texto.month, texto.day)
+    elif isinstance(texto, (int, float)):
+        if not 20000 <= texto <= 80000:           # fora do intervalo de datas plausiveis (anos 1954 a 2118)
+            return None
+        data = EXCEL_BASE + timedelta(days=int(texto))
+    else:
+        t = str(texto).strip()
+        if not t:
+            return None
+        t = re.split(r"[ T]", t, maxsplit=1)[0]  # descarta a hora, se houver
+        data = None
+        for formato in FORMATOS_DATA:
+            try:
+                data = datetime.strptime(t, formato)
+                break
+            except ValueError:
+                continue
+        if data is None:
+            return None
+    return data if 1990 <= data.year <= 2100 else None
 
 
 def parse_valor(texto):
     """
-    converte valores como 'R$ 1.234,56', '-50.00', '(50,00)' ou '50,00 D' em numero
+    converte valores como 'R$ 1.234,56', '-50.00', '(50,00)' ou '50,00 D' em numero (e aceita numeros do Excel)
     negativo = despesa. devolve None se nao der para entender
     """
+    if isinstance(texto, bool):
+        return None
+    if isinstance(texto, (int, float)):
+        numero = float(texto)
+        if numero != numero or abs(numero) > VALOR_MAX:
+            return None
+        return round(numero, 2)
+
     t = str(texto).strip()
     if not t:
         return None
@@ -90,37 +123,58 @@ def parse_valor(texto):
     return -numero if negativo else numero
 
 
-# ------------------------------------------------------------------------ CSV
+# ------------------------------------------------- tabelas (CSV e XLSX compartilham a leitura)
 
 DESC_NOMES = {"historico", "lancamento", "memo", "estabelecimento", "detalhes",
               "detalhe", "description", "titulo", "nome"}
+TIPO_NOMES = {"tipo", "type", "natureza", "d/c", "debito/credito", "tipo de lancamento"}
+CATEGORIA_NOMES = {"categoria", "category"}
+CONTA_NOMES = {"conta", "cartao", "conta/cartao", "cartao/conta", "conta ou cartao", "cartao ou conta"}
+
+# valor da coluna Tipo (sem acento) -> despesa ou receita
+TIPOS = {"despesa": "despesa", "gasto": "despesa", "saida": "despesa", "debito": "despesa", "pagamento": "despesa", "d": "despesa",
+         "receita": "receita", "entrada": "receita", "credito": "receita", "ganho": "receita", "c": "receita"}
 
 
 def _achar_colunas(linha):
-    """procura na linha o cabecalho (colunas de data, descricao e valor)"""
-    nomes = [_sem_acento(c) for c in linha]
+    """procura na linha o cabecalho; devolve {campo: indice} ou None se faltar data, descricao ou valor"""
     achados = {}
-    for i, n in enumerate(nomes):
+    for i, celula in enumerate(linha):
+        n = _sem_acento("" if celula is None else celula)
         if "data" not in achados and (n.startswith("data") or n == "date"):
             achados["data"] = i
         elif "valor" not in achados and (n.startswith("valor") or n in {"amount", "value", "quantia"}):
             achados["valor"] = i
         elif "desc" not in achados and (n in DESC_NOMES or n.startswith("descri")):
             achados["desc"] = i
-    return achados if len(achados) == 3 else None
+        elif "tipo" not in achados and n in TIPO_NOMES:
+            achados["tipo"] = i
+        elif "categoria" not in achados and n in CATEGORIA_NOMES:
+            achados["categoria"] = i
+        elif "conta" not in achados and n in CONTA_NOMES:
+            achados["conta"] = i
+    return achados if {"data", "valor", "desc"} <= set(achados) else None
 
 
-def ler_csv(texto):
-    """devolve (lancamentos, erros). cada lancamento: {data, descricao, valor}"""
-    amostra = texto[:4096]
-    delimitador = max([";", ",", "\t"], key=amostra.count)
+def _vazio(celula):
+    return celula is None or not str(celula).strip()
 
-    leitor = csv.reader(io.StringIO(texto), delimiter=delimitador)
+
+def _texto_da_celula(celula, maximo):
+    return "" if _vazio(celula) else " ".join(str(celula).split())[:maximo]
+
+
+def _processar_linhas(linhas):
+    """
+    le linhas (listas de celulas, de CSV ou de XLSX) e devolve (lancamentos, erros)
+    cada lancamento: {data, descricao, valor} e, quando a planilha informa, {categoria, conta, tipo_explicito}
+    """
     colunas = None
     lancamentos, erros = [], []
 
-    for numero, linha in enumerate(leitor, start=1):
-        if not any(c.strip() for c in linha):
+    for numero, linha in enumerate(linhas, start=1):
+        linha = list(linha)
+        if all(_vazio(c) for c in linha):
             continue
         if colunas is None:
             # ignora linhas de apresentacao do banco ate achar o cabecalho
@@ -129,24 +183,104 @@ def ler_csv(texto):
         if len(lancamentos) + len(erros) >= LIMITE_LINHAS:
             raise ExtratoInvalido(f"o arquivo tem linhas demais (máximo {LIMITE_LINHAS})")
 
+        def celula(campo):
+            i = colunas.get(campo)
+            return linha[i] if i is not None and i < len(linha) else None
+
         try:
             data = parse_data(linha[colunas["data"]])
             valor = parse_valor(linha[colunas["valor"]])
-            descricao = " ".join(linha[colunas["desc"]].split())[:255]
+            descricao = _texto_da_celula(linha[colunas["desc"]], 255)
         except IndexError:
             erros.append({"linha": numero, "motivo": "linha incompleta"})
             continue
+
+        if descricao.upper().startswith("EXEMPLO -"):      # linhas de exemplo do modelo de planilha nunca sao importadas
+            continue
+
+        tipo = None
+        if not _vazio(celula("tipo")):
+            tipo = TIPOS.get(_sem_acento(celula("tipo")))
+            if tipo is None:
+                erros.append({"linha": numero, "motivo": "tipo inválido (use Despesa ou Receita)"})
+                continue
 
         if data is None:
             erros.append({"linha": numero, "motivo": "data inválida"})
         elif valor is None or valor == 0:
             erros.append({"linha": numero, "motivo": "valor inválido"})
         else:
-            lancamentos.append({"data": data, "descricao": descricao or "Sem descrição", "valor": valor})
+            if tipo:                                         # com a coluna Tipo, o valor pode vir sempre positivo
+                valor = -abs(valor) if tipo == "despesa" else abs(valor)
+            lanc = {"data": data, "descricao": descricao or "Sem descrição", "valor": valor}
+            if tipo:
+                lanc["tipo_explicito"] = True
+            categoria, conta = _texto_da_celula(celula("categoria"), 80), _texto_da_celula(celula("conta"), 100)
+            if categoria:
+                lanc["categoria"] = categoria
+            if conta:
+                lanc["conta"] = conta
+            lancamentos.append(lanc)
 
     if colunas is None:
-        raise ExtratoInvalido("não encontrei as colunas de data, descrição e valor no CSV")
+        raise ExtratoInvalido("não encontrei as colunas de data, descrição e valor no arquivo")
     return lancamentos, erros
+
+
+# ------------------------------------------------------------------------ CSV
+
+def ler_csv(texto):
+    """devolve (lancamentos, erros)"""
+    amostra = texto[:4096]
+    delimitador = max([";", ",", "\t"], key=amostra.count)
+    return _processar_linhas(csv.reader(io.StringIO(texto), delimiter=delimitador))
+
+
+# ------------------------------------------------------------------------ XLSX
+
+def _validar_zip(conteudo):
+    """um .xlsx e um zip: confere o tamanho descompactado e a senha antes de abrir, para nao esgotar a memoria do servidor"""
+    try:
+        with zipfile.ZipFile(io.BytesIO(conteudo)) as arquivo:
+            itens = arquivo.infolist()
+    except zipfile.BadZipFile:
+        raise ExtratoInvalido("o arquivo não é uma planilha .xlsx válida (está corrompido ou tem outro formato)")
+    if len(itens) > MAX_ARQUIVOS_ZIP or sum(i.file_size for i in itens) > MAX_DESCOMPACTADO:
+        raise ExtratoInvalido("a planilha é grande demais depois de descompactada")
+    if any(i.flag_bits & 0x1 for i in itens):
+        raise ExtratoInvalido("planilhas protegidas por senha não são aceitas")
+
+
+def ler_xlsx(conteudo: bytes):
+    """
+    planilha do Excel ou do Google Planilhas. le a aba "Lançamentos" (ou a primeira visivel); formulas sem valor
+    calculado vem vazias: salve o arquivo no Excel antes de enviar. o openpyxl usa o defusedxml quando instalado,
+    o que barra XML malicioso (entidades externas e "billion laughs")
+    """
+    _validar_zip(conteudo)
+    try:
+        from openpyxl import load_workbook
+    except ImportError:
+        raise ExtratoInvalido("a leitura de planilhas Excel não está disponível neste servidor (instale o openpyxl)")
+    try:
+        livro = load_workbook(io.BytesIO(conteudo), read_only=True, data_only=True)
+        try:
+            planilha = (next((w for w in livro.worksheets if _sem_acento(w.title) == "lancamentos"), None)
+                        or next((w for w in livro.worksheets if w.sheet_state == "visible"), None))
+            if planilha is None:
+                raise ExtratoInvalido("a planilha não tem nenhuma aba visível")
+            # le so as linhas necessarias: planilhas costumam ter formatacao ate a linha 1 milhao
+            linhas = list(planilha.iter_rows(min_row=1, max_row=LIMITE_LINHAS + 60, values_only=True))
+            resto = list(planilha.iter_rows(min_row=LIMITE_LINHAS + 61, max_row=LIMITE_LINHAS + 61, values_only=True))
+        finally:
+            livro.close()
+    except ExtratoInvalido:
+        raise
+    except Exception:
+        raise ExtratoInvalido("não consegui ler a planilha. Confira se é um arquivo .xlsx do Excel ou do Google Planilhas")
+    if resto and any(not _vazio(c) for c in resto[0]):
+        raise ExtratoInvalido(f"o arquivo tem linhas demais (máximo {LIMITE_LINHAS})")
+    return _processar_linhas(linhas)
 
 
 # ------------------------------------------------------------------------ OFX
@@ -198,9 +332,12 @@ def ler_ofx(texto):
 
 
 def ler_extrato(extensao, conteudo: bytes):
-    """ponto de entrada: escolhe o leitor pela extensao e valida o resultado"""
-    texto = _decodificar(conteudo)
-    lancamentos, erros = ler_csv(texto) if extensao == "csv" else ler_ofx(texto)
+    """ponto de entrada: escolhe o leitor pela extensao (csv, ofx ou xlsx) e valida o resultado"""
+    if extensao == "xlsx":
+        lancamentos, erros = ler_xlsx(conteudo)
+    else:
+        texto = _decodificar(conteudo)
+        lancamentos, erros = ler_csv(texto) if extensao == "csv" else ler_ofx(texto)
     if not lancamentos:
         raise ExtratoInvalido("nenhuma transação válida encontrada no arquivo")
     return lancamentos, erros
@@ -232,7 +369,7 @@ def limpar_descricao_parcela(descricao):
     base = RE_PARC_PALAVRA.sub(" ", descricao)
     base = RE_PARC_BARRA.sub(" ", base)
     base = re.sub(r"\(\s*\)|\[\s*\]", " ", base)               # parenteses vazios que sobraram
-    base = " ".join(base.split()).strip(" -–—:;,.")                 # separadores soltos nas pontas
+    base = " ".join(base.split()).strip(" -–—:;,.")             # separadores soltos nas pontas
     return base or descricao
 
 

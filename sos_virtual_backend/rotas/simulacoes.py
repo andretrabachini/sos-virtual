@@ -11,7 +11,7 @@ from validacao import erro, texto
 
 simulacoes_bp = Blueprint("simulacoes", __name__, url_prefix="/api/simulacoes")
 
-EXTENSOES_ACEITAS = {"csv", "ofx", "qfx"}
+EXTENSOES_ACEITAS = {"csv", "ofx", "qfx", "xlsx"}
 
 
 def _marcado(valor):
@@ -24,10 +24,12 @@ def _marcado(valor):
 @limiter.limit("20 per hour")
 def importar_extrato():
     """
-    recebe um extrato (CSV ou OFX) em multipart/form-data:
-      arquivo     -> o arquivo (obrigatorio)
+    recebe um extrato ou planilha (CSV, OFX ou XLSX) em multipart/form-data:
+      arquivo     -> o arquivo (obrigatorio). planilhas podem trazer as colunas Tipo, Categoria e Conta
+                     (veja o modelo em /api/modelos/planilha.xlsx)
       conta       -> nome da conta/cartao de origem (padrao: "Conta Principal")
-      cartao      -> "true" se for fatura de cartao (compras vem positivas; inverte o sinal)
+      cartao      -> "true" se for fatura de cartao (compras vem positivas; inverte o sinal). nao vale para linhas
+                     que tem a coluna Tipo preenchida: ali o tipo ja diz se e despesa ou receita
       valor_total -> "true" se o valor das compras parceladas for o TOTAL da compra
                      (por padrao o valor do extrato ja e o de uma parcela)
       parcelas    -> "false" desliga a deteccao de compras parceladas
@@ -43,7 +45,7 @@ def importar_extrato():
     nome = arquivo.filename.lower()
     extensao = nome.rsplit(".", 1)[-1] if "." in nome else ""
     if extensao not in EXTENSOES_ACEITAS:
-        return erro("formato não suportado (envie um arquivo CSV ou OFX)")
+        return erro("formato não suportado (envie um arquivo CSV, OFX ou XLSX)")
     if extensao == "qfx":
         extensao = "ofx"
 
@@ -60,7 +62,8 @@ def importar_extrato():
     # fatura de cartao: o banco lista as compras como valores positivos
     if _marcado(request.form.get("cartao")):
         for l in lancamentos:
-            l["valor"] = -l["valor"]
+            if not l.get("tipo_explicito"):
+                l["valor"] = -l["valor"]
 
     antes = fotografar_alertas(usuario_id)
     try:

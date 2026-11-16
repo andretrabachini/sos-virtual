@@ -124,6 +124,7 @@ from rotas.alertas import alertas_bp
 from rotas.simulacoes import simulacoes_bp
 from rotas.grafos import grafos_bp
 from rotas.parcelamentos import parcelamentos_bp
+from rotas.modelos import modelos_bp
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(transacoes_bp)
@@ -133,6 +134,7 @@ app.register_blueprint(alertas_bp)
 app.register_blueprint(simulacoes_bp)
 app.register_blueprint(grafos_bp)
 app.register_blueprint(parcelamentos_bp)
+app.register_blueprint(modelos_bp)
 
 if __name__ == "__main__":
     with app.app_context():

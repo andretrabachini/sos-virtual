@@ -18,6 +18,9 @@
 #sugestao{min-height:1.3rem;font-size:.88rem}
 .selo{display:inline-block;margin-left:.4rem;padding:.05rem .5rem;border-radius:99px;background:var(--bg);border:1px solid var(--line);color:var(--ink2);font-size:.75rem;font-weight:600;white-space:nowrap}
 .tabela-rolavel{overflow-x:auto}
+.modelo-planilha{display:flex;gap:1rem;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:1rem 1.1rem;border:1.5px dashed var(--line);border-radius:var(--r);margin-bottom:.8rem}
+.como-preencher{margin-bottom:1.1rem}.como-preencher summary{cursor:pointer;font-weight:600}
+.como-preencher table{margin:.7rem 0 .5rem}.como-preencher td:first-child{font-weight:600;white-space:nowrap}
 </style></head>
 <body data-pagina="transacoes">
 <div class="app"><aside id="menu"></aside>
@@ -51,13 +54,28 @@
     </form>
     <div id="resparc" class="aviso" hidden role="status" style="margin:1rem 0 0"></div>
   </section>
-  <section class="painel"><h2>Importar extrato</h2>
-    <p class="rot" style="margin-bottom:1rem">Envie o extrato do banco ou a fatura do cartão em CSV ou OFX (até 2 MB). Compras parceladas, como "PARC 02/05", são reconhecidas e as parcelas futuras aparecem na projeção do painel. O arquivo é lido na hora e não fica guardado: só os lançamentos entram no sistema, todos associados à conta escolhida abaixo.</p>
+  <section class="painel"><h2>Importar extrato ou planilha</h2>
+    <p class="rot" style="margin-bottom:1rem">Envie o extrato do banco, a fatura do cartão ou a sua própria planilha, em CSV, OFX ou Excel (.xlsx), até 2 MB. Compras parceladas, como "PARC 02/05", são reconhecidas e as parcelas futuras aparecem na projeção do painel. O arquivo é lido na hora e não fica guardado: só os lançamentos entram no sistema, todos associados à conta escolhida abaixo.</p>
+    <div class="modelo-planilha">
+      <div><b>Vai importar uma planilha sua?</b><div class="rot">Baixe o modelo, preencha no Excel ou no Google Planilhas e envie aqui. O modelo em Excel já traz listas para escolher o tipo, a categoria e a conta.</div></div>
+      <div class="acoes-linha"><button type="button" class="btn peq" id="baixar-xlsx">Baixar modelo (Excel)</button><button type="button" class="btn sec peq" id="baixar-csv">Baixar modelo (CSV)</button></div>
+    </div>
+    <details class="como-preencher"><summary>Como preencher a planilha</summary>
+      <table><thead><tr><th>Coluna</th><th>Obrigatória</th><th>O que colocar</th></tr></thead><tbody>
+        <tr><td>Data</td><td>Sim</td><td>Dia da compra: 15/10/2026 (ou 2026-10-15).</td></tr>
+        <tr><td>Descrição</td><td>Sim</td><td>O que foi comprado ou onde. Compra parcelada: escreva a parcela na descrição, como "Notebook PARC 02/10".</td></tr>
+        <tr><td>Valor</td><td>Sim</td><td>250,00. Com a coluna Tipo preenchida, use sempre valor positivo; sem ela, despesas levam o sinal de menos (-250,00).</td></tr>
+        <tr><td>Tipo</td><td>Não</td><td>Despesa ou Receita. Em branco, vale o sinal do valor.</td></tr>
+        <tr><td>Categoria</td><td>Não</td><td>Uma das categorias do sistema. Em branco, ela é descoberta pela descrição.</td></tr>
+        <tr><td>Conta</td><td>Não</td><td>Cartão ou conta em que foi pago (um nome novo cria a conta). Em branco, usa a conta escolhida abaixo. Receitas não têm conta.</td></tr>
+      </tbody></table>
+      <div class="rot">Linhas que começam com "EXEMPLO -" são ignoradas. Enviar o mesmo arquivo de novo não duplica nada. Máximo de 1.000 linhas.</div>
+    </details>
     <form id="formimp" class="form-grid">
-      <div class="campo larga"><label for="arquivo">Arquivo do extrato (CSV ou OFX)</label><input type="file" id="arquivo" accept=".csv,.ofx,.qfx" required></div>
-      <div class="campo larga"><label for="contasel">Conta ou cartão</label><select id="contasel"></select><input id="conta" maxlength="100" placeholder="Nome da nova conta ou cartão" autocomplete="off" hidden style="margin-top:.5rem"></div>
+      <div class="campo larga"><label for="arquivo">Arquivo (extrato, fatura ou planilha: CSV, OFX ou XLSX)</label><input type="file" id="arquivo" accept=".csv,.ofx,.qfx,.xlsx" required></div>
+      <div class="campo larga"><label for="contasel">Conta ou cartão (para as linhas sem a coluna Conta)</label><select id="contasel"></select><input id="conta" maxlength="100" placeholder="Nome da nova conta ou cartão" autocomplete="off" hidden style="margin-top:.5rem"></div>
       <div class="opcoes">
-        <label><input type="checkbox" id="cartao"><span>É fatura de cartão (as compras aparecem como valores positivos)</span></label>
+        <label><input type="checkbox" id="cartao"><span>É fatura de cartão (as compras aparecem como valores positivos; não vale para linhas com a coluna Tipo)</span></label>
         <label><input type="checkbox" id="vtotal"><span>Nas compras parceladas, o valor do arquivo é o total da compra (por padrão, é o valor de uma parcela)</span></label>
         <label><input type="checkbox" id="detparc" checked><span>Detectar compras parceladas e projetar as parcelas futuras</span></label>
       </div>
@@ -180,6 +198,8 @@ function resumoImp(r){
     +r.erros.map(x=>'linha '+x.linha+' ('+esc(x.motivo)+')').join(', ')+(r.linhas_com_erro>r.erros.length?' e outras.':'.')+'</p>';
   const fr=Object.entries(r.fora_da_regra||{});
   if(fr.length)h+='<p style="margin-top:.6rem"><b>Atenção:</b> este extrato tem lançamentos em categorias que essa conta normalmente não aceita: '+fr.map(([c,n])=>esc(c)+' ('+n+')').join(', ')+'. Foram importados mesmo assim.</p>';
+  if(r.categorias_ignoradas)h+='<p class="rot" style="margin-top:.6rem">'+r.categorias_ignoradas+' linha(s) tinham uma categoria que não existe no sistema: a categoria foi descoberta pela descrição.</p>';
+  if(r.linhas_sem_conta)h+='<p style="margin-top:.6rem"><b>Atenção:</b> '+r.linhas_sem_conta+' linha(s) não foram importadas porque o limite de contas foi atingido.</p>';
   h+='<p class="rot" style="margin-top:.6rem">Os lançamentos aparecem no histórico do mês em que foram feitos: use o seletor de mês para ver os de outros meses.</p>';
   resimp.innerHTML=h;resimp.hidden=false;
 }
@@ -187,7 +207,7 @@ formimp.addEventListener('submit',async e=>{e.preventDefault();
   aviso('msg');resimp.hidden=true;
   const f=arquivo.files[0];
   if(!f)return aviso('msg','Escolha um arquivo CSV ou OFX.','erro');
-  if(!/\.(csv|ofx|qfx)$/i.test(f.name))return aviso('msg','Formato não suportado. Envie um arquivo CSV ou OFX.','erro');
+  if(!/\.(csv|ofx|qfx|xlsx)$/i.test(f.name))return aviso('msg','Formato não suportado. Envie um arquivo CSV, OFX ou XLSX (planilha do Excel).','erro');
   if(f.size>2*1024*1024)return aviso('msg','O arquivo passa de 2 MB.','erro');
   const nomeConta=nomeEscolhido(contasel,conta);
   if(!nomeConta)return aviso('msg','Digite o nome da nova conta ou cartão.','erro');
@@ -242,6 +262,19 @@ let tContas=null;const agendarContas=()=>{clearTimeout(tContas);tContas=setTimeo
 window.addEventListener('focus',agendarContas);                                                       // voltou para esta aba/janela
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)agendarContas();});
 window.addEventListener('storage',e=>{if(e.key==='sosv_contas_mudou')agendarContas();});            // outra aba (ex.: Otimizador) mudou as contas
+// baixa o modelo de planilha (precisa do token, por isso não é um link simples)
+async function baixarModelo(ext){
+  try{
+    const r=await fetch(API+'/modelos/planilha.'+ext,{headers:{'Authorization':'Bearer '+(localStorage.getItem('sosv_token')||'')}});
+    if(r.status===401){sair();return;}
+    if(!r.ok)throw new Error('Não consegui gerar o modelo (erro '+r.status+').');
+    const url=URL.createObjectURL(await r.blob()),a=document.createElement('a');
+    a.href=url;a.download='modelo-sos-virtual.'+ext;document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+  }catch(e){aviso('msg',msgErro(e),'erro');}
+}
+document.getElementById('baixar-xlsx').addEventListener('click',()=>baixarModelo('xlsx'));
+document.getElementById('baixar-csv').addEventListener('click',()=>baixarModelo('csv'));
 restaurarForm();carregarParcelas();
 atualizarContas(false).then(()=>carregar());   // primeiro as contas, para o histórico já mostrar a coluna certa
 </script></body></html>

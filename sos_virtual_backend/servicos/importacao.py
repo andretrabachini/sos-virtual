@@ -16,9 +16,20 @@ from servicos.extratos import (
     gerar_projecoes,
     limpar_descricao_parcela,
 )
-from servicos.contas import categorias_aceitas
-from servicos.financeiro import detectar_categoria
+from servicos.categorizacao import normalizar
+from servicos.contas import ContaInvalida, categorias_aceitas, conta_por_nome
+from servicos.financeiro import CATEGORIAS, detectar_categoria
 from servicos.tempo import agora as agora_local
+
+
+# categoria escrita na planilha (sem diferenciar acento e maiuscula) -> categoria do sistema
+_CATEGORIAS_POR_NOME = {normalizar(c): c for c in CATEGORIAS + ["Salário"]}
+
+
+def _categoria_da_planilha(texto, valor):
+    """a categoria do sistema para o que a planilha escreveu, ou None se nao existir. "Salário" so vale para receitas"""
+    categoria = _CATEGORIAS_POR_NOME.get(normalizar(texto)) if texto else None
+    return None if (categoria == "Salário" and valor < 0) else categoria
 
 
 def _obter_no(usuario_id, nome, tipo, cache):
@@ -76,12 +87,20 @@ def importar_lancamentos(usuario_id, lancamentos, conta, valor_e_total=False, de
     """
     grava os lancamentos como transacoes, pula os que ja foram importados antes
     e, para compras parceladas, cria as parcelas futuras como arestas projetadas
+    `conta` e a conta escolhida na tela; uma planilha pode trazer a conta de cada linha (coluna Conta) e a categoria
+    (coluna Categoria), que valem no lugar da conta da tela e da deteccao automatica
     NAO faz commit: quem chama decide (assim, se algo falhar, nada fica pela metade)
     """
-    resumo = {"importadas": 0, "duplicadas": 0, "parceladas": [], "projecoes_criadas": 0, "fora_da_regra": {}}
-    cache_nos = {}
-    no_conta = _obter_no(usuario_id, conta, "conta", cache_nos)
-    aceitas = categorias_aceitas(usuario_id, no_conta.id)      # vale: so algumas categorias
+    resumo = {"importadas": 0, "duplicadas": 0, "parceladas": [], "projecoes_criadas": 0, "fora_da_regra": {},
+              "categorias_ignoradas": 0, "linhas_sem_conta": 0}
+    cache_nos = {}                                              # nos de categoria (para as parcelas futuras)
+    contas_usadas = {}                                          # nome -> conta; cada conta so e criada quando alguma linha a usa
+    aceitas_por_conta = {}
+
+    def aceitas_da(conta_no):                                   # vale: so algumas categorias
+        if conta_no.id not in aceitas_por_conta:
+            aceitas_por_conta[conta_no.id] = categorias_aceitas(usuario_id, conta_no.id)
+        return aceitas_por_conta[conta_no.id]
 
     # carrega de uma vez o que ja existe no periodo, para detectar reimportacao do mesmo extrato
     # contamos ocorrencias: duas compras iguais no mesmo dia continuam valendo as duas
@@ -111,23 +130,42 @@ def importar_lancamentos(usuario_id, lancamentos, conta, valor_e_total=False, de
             resumo["duplicadas"] += 1
             continue
 
-        categoria = detectar_categoria(descricao, valor)
+        # conta desta linha: a da planilha (coluna Conta) ou, se vazia, a escolhida na tela. receitas nao tem conta
+        conta_linha = None
+        if valor < 0:
+            nome_conta = lanc.get("conta") or conta
+            if nome_conta not in contas_usadas:
+                try:
+                    contas_usadas[nome_conta] = conta_por_nome(usuario_id, nome_conta, criar=True)
+                except ContaInvalida:
+                    resumo["linhas_sem_conta"] += 1             # passou do limite de contas: a linha nao e importada
+                    continue
+            conta_linha = contas_usadas[nome_conta]
+
+        # categoria: a da planilha, se existir; senao a detectada pela descricao
+        categoria = _categoria_da_planilha(lanc.get("categoria"), valor)
+        if categoria is None:
+            if lanc.get("categoria"):
+                resumo["categorias_ignoradas"] += 1
+            categoria = detectar_categoria(descricao, valor)
+
         db.session.add(Transacao(
             usuario_id=usuario_id,
             descricao=descricao,
             valor=valor,
             categoria=categoria,
             data=lanc["data"],
-            conta_id=no_conta.id if valor < 0 else None,       # o extrato e dessa conta; receitas nao tem conta
+            conta_id=conta_linha.id if conta_linha else None,
         ))
         resumo["importadas"] += 1
-        if valor < 0 and aceitas and categoria not in aceitas:     # importa mesmo assim (o extrato manda), mas avisa
+        aceitas = aceitas_da(conta_linha) if conta_linha else []
+        if valor < 0 and aceitas and categoria not in aceitas:     # importa mesmo assim (o arquivo manda), mas avisa
             resumo["fora_da_regra"][categoria] = resumo["fora_da_regra"].get(categoria, 0) + 1
 
         if parcela:
             no_categoria = _obter_no(usuario_id, categoria, "categoria", cache_nos)
             criadas = _projetar_parcelas(
-                usuario_id, no_conta, no_categoria, lanc, atual, total, valores
+                usuario_id, conta_linha, no_categoria, lanc, atual, total, valores
             )
             resumo["projecoes_criadas"] += criadas
             resumo["parceladas"].append({
