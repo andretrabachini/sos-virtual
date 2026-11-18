@@ -11,6 +11,7 @@ from modelos.modelos import Aresta, No, Transacao
 from servicos.alertas_service import alertas_ultrapassados, fotografar_alertas
 from servicos.categorizacao import detectar_categoria_com_motivo
 from servicos.contas import ContaInvalida, checar_categoria, conta_por_nome, nomes_das_contas, transacao_com_conta
+from servicos.lancamentos import data_da_compra, gravar_transacao
 from servicos.financeiro import CATEGORIAS
 from servicos.tempo import agora, hoje
 from validacao import VALOR_MAX, corpo_json, data_iso, erro, numero, texto
@@ -24,6 +25,7 @@ CATEGORIAS_VALIDAS = set(CATEGORIAS) | {"Salário"}
 MES_RE = re.compile(r"^(\d{4})-(0[1-9]|1[0-2])$")
 
 MSG_SALARIO = "a categoria Salário só vale para receitas"
+MAX_LOTE = 200          # transacoes por pedido de atribuicao em lote
 
 
 def _categoria_valida(valor):
@@ -35,11 +37,7 @@ def _ler_data(valor):
     data = data_iso(valor)
     if data is None:
         return None, "data inválida (use o formato AAAA-MM-DD)"
-    data = data.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
-    hoje_ = hoje()
-    if not hoje_ - relativedelta(years=5) <= data <= hoje_ + relativedelta(months=12):
-        return None, "a data deve estar entre 5 anos atrás e 12 meses à frente"
-    return (agora() if data == hoje_ else data), None     # compra de hoje guarda a hora (ordem dentro do dia)
+    return data_da_compra(data)
 
 
 def _ler_nome_conta(valor):
@@ -160,27 +158,74 @@ def criar():
     if mensagem:
         return erro(mensagem)
 
-    antes = fotografar_alertas(usuario_id) if valor < 0 else None   # so despesas mexem nos alertas
+    try:
+        resposta = gravar_transacao(usuario_id, descricao, valor, categoria, data, nome_conta)
+    except ContaInvalida as e:
+        return erro(str(e))
+    return jsonify(resposta), 201
 
-    conta_id = None
-    if nome_conta and valor < 0:                                    # conta so faz sentido para despesas
+
+@transacoes_bp.route("/lote", methods=["PUT"])
+@jwt_required()
+@limiter.limit("60 per hour")
+def atribuir_conta_em_lote():
+    """
+    atribui (ou tira) a conta de varias despesas de uma vez, ex.: as compras antigas que ficaram sem conta
+      {"ids": [12, 15, 20], "conta": "Cartão Itaú"}      conta "" = tirar a conta
+    - receitas nao tem conta: sao ignoradas
+    - uma conta restrita (vale) que nao aceita a categoria da compra deixa essa compra de fora (volta em "recusadas")
+      e as demais sao atualizadas normalmente
+    - ids de outras pessoas ou inexistentes nunca sao tocados (so contam em "nao_encontradas")
+    """
+    usuario_id = usuario_id_atual()
+    dados = corpo_json()
+    if dados is None:
+        return erro("corpo da requisição inválido")
+
+    ids = dados.get("ids")
+    if not isinstance(ids, list) or not 1 <= len(ids) <= MAX_LOTE or not all(isinstance(i, int) and not isinstance(i, bool) for i in ids):
+        return erro(f"informe de 1 a {MAX_LOTE} transações em 'ids'")
+    if "conta" not in dados:
+        return erro("informe a conta (vazio para tirar a conta)")
+    nome_conta, mensagem = _ler_nome_conta(dados["conta"])
+    if mensagem:
+        return erro(mensagem)
+
+    ids = list(dict.fromkeys(ids))                                  # sem repetidos
+    transacoes = Transacao.query.filter(Transacao.usuario_id == usuario_id, Transacao.id.in_(ids)).all()
+    if not transacoes:
+        return erro("nenhuma das transações foi encontrada", 404)
+
+    conta = None
+    if nome_conta:
         try:
             conta = conta_por_nome(usuario_id, nome_conta, criar=True)
-            checar_categoria(usuario_id, conta, categoria)
         except ContaInvalida as e:
             db.session.rollback()
             return erro(str(e))
-        conta_id = conta.id
 
-    nova = Transacao(usuario_id=usuario_id, descricao=descricao, valor=valor, categoria=categoria, conta_id=conta_id)
-    if data is not None:
-        nova.data = data
+    atualizadas, receitas, recusadas = 0, 0, []
+    for t in transacoes:
+        if t.valor > 0:
+            receitas += 1
+            continue
+        if conta is not None:
+            try:
+                checar_categoria(usuario_id, conta, t.categoria)
+            except ContaInvalida:
+                recusadas.append({"id": t.id, "descricao": t.descricao, "categoria": t.categoria})
+                continue
+        t.conta_id = conta.id if conta else None
+        atualizadas += 1
 
-    db.session.add(nova)
     db.session.commit()
-    resposta = transacao_com_conta(nova, nomes_das_contas(usuario_id))
-    resposta["alertas"] = alertas_ultrapassados(usuario_id, antes)   # o front mostra um pop-up com eles
-    return jsonify(resposta), 201
+    return jsonify({
+        "conta": conta.nome if conta else None,
+        "atualizadas": atualizadas,
+        "receitas_ignoradas": receitas,
+        "recusadas": recusadas,
+        "nao_encontradas": len(ids) - len(transacoes),
+    })
 
 
 @transacoes_bp.route("/<int:transacao_id>", methods=["PUT"])
@@ -217,6 +262,8 @@ def editar(transacao_id):
         nova_data, mensagem = _ler_data(dados["data"])
         if nova_data is None:
             return erro(mensagem)
+        if t.data and nova_data.date() == t.data.date():
+            nova_data = t.data                                      # mesmo dia: mantem a hora (ordem dentro do dia)
 
     # vale para a combinacao final: trocar o sinal de uma receita "Salário" tambem e barrado
     if nova_categoria == "Salário" and novo_valor < 0:

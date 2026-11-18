@@ -21,6 +21,11 @@
 .modelo-planilha{display:flex;gap:1rem;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:1rem 1.1rem;border:1.5px dashed var(--line);border-radius:var(--r);margin-bottom:.8rem}
 .como-preencher{margin-bottom:1.1rem}.como-preencher summary{cursor:pointer;font-weight:600}
 .como-preencher table{margin:.7rem 0 .5rem}.como-preencher td:first-child{font-weight:600;white-space:nowrap}
+.data-sel{padding:.3rem .45rem;border:1.5px solid var(--line);border-radius:var(--r);font:inherit;font-size:.88rem;background:#fff;color:var(--ink)}
+.barra-lote{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;padding:.7rem .9rem;margin-bottom:.8rem;background:var(--bg);border:1.5px solid var(--brand2);border-radius:var(--r)}
+.barra-lote select,.barra-lote input[type=text]{padding:.4rem .6rem;border:1.5px solid var(--line);border-radius:var(--r);font:inherit;background:#fff;color:var(--ink)}
+.dica-lote{margin-bottom:.8rem;display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}
+td input[type=checkbox],th input[type=checkbox]{width:1.1rem;height:1.1rem;accent-color:var(--brand)}
 </style></head>
 <body data-pagina="transacoes">
 <div class="app"><aside id="menu"></aside>
@@ -88,7 +93,15 @@
     <div class="tabela-rolavel"><table><thead><tr><th>Compra</th><th>Cartão ou conta</th><th>Parcelas</th><th>Valor da parcela</th><th>Falta pagar</th><th>Próxima</th><th></th></tr></thead><tbody id="listaparc"></tbody></table></div>
   </section>
   <section class="painel"><div class="filtro"><h2>Histórico</h2><div id="seletor-mes-hist"></div></div>
-    <table><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Conta</th><th>Valor</th><th></th></tr></thead><tbody id="tb"></tbody></table>
+    <div class="dica-lote" id="dicalote" hidden><span class="rot" id="dicaloteTxt"></span><button type="button" class="btn sec peq" id="selsemconta">Selecionar todas</button></div>
+    <div class="barra-lote" id="barralote" hidden role="region" aria-label="Atribuir conta às compras selecionadas">
+      <b id="loteqtd"></b>
+      <label class="rot" for="lotesel">Conta:</label><select id="lotesel"></select>
+      <input type="text" id="lotenova" maxlength="100" placeholder="Nome da nova conta ou cartão" autocomplete="off" hidden>
+      <button type="button" class="btn peq" id="loteAplicar">Aplicar às selecionadas</button>
+      <button type="button" class="btn sec peq" id="loteLimpar">Limpar seleção</button>
+    </div>
+    <table><thead><tr><th><input type="checkbox" id="seltodas" aria-label="Selecionar todas as despesas do mês"></th><th>Data</th><th>Descrição</th><th>Categoria</th><th>Conta</th><th>Valor</th><th></th></tr></thead><tbody id="tb"></tbody></table>
   </section>
 </main></div>
 <script src="js/app.js"></script>
@@ -121,12 +134,36 @@ montarCategorias();
 const optsConta=atual=>{const lista=nomesContas.includes(atual)||!atual?nomesContas:[atual].concat(nomesContas);
   return '<option value=""'+(atual?'':' selected')+'>Sem conta</option>'+lista.map(n=>'<option'+(n===atual?' selected':'')+'>'+esc(n)+'</option>').join('');};
 const selConta=t=>t.valor<0?'<select class="cat-sel" data-conta-id="'+t.id+'" aria-label="Conta de '+esc(t.descricao)+'">'+optsConta(t.conta)+'</select>':'<span class="rot">—</span>';
+// seleção para atribuir conta em lote (só despesas têm conta)
+const sel=new Set();let listaAtual=[];
+const pad2=n=>String(n).padStart(2,'0'),isoDe=d=>d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());
+const limitesData=()=>{const h=new Date();return {min:isoDe(new Date(h.getFullYear()-5,h.getMonth(),h.getDate())),max:isoDe(new Date(h.getFullYear(),h.getMonth()+12,h.getDate()))};};   // os mesmos limites do servidor
+const caixaSel=t=>t.valor<0?'<input type="checkbox" data-sel-id="'+t.id+'" aria-label="Selecionar '+esc(t.descricao)+'"'+(sel.has(t.id)?' checked':'')+'>':'';
+const campoData=(t,lim)=>'<input type="date" class="data-sel" data-data-id="'+t.id+'" value="'+t.data.slice(0,10)+'" min="'+lim.min+'" max="'+lim.max+'" aria-label="Data de '+esc(t.descricao)+'">';
+function atualizarBarra(){
+  const caixas=[...tb.querySelectorAll('[data-sel-id]')],marcadas=caixas.filter(c=>c.checked).length;
+  barralote.hidden=!sel.size;loteqtd.textContent=sel.size+(sel.size===1?' compra selecionada':' compras selecionadas');
+  seltodas.disabled=!caixas.length;seltodas.checked=caixas.length>0&&marcadas===caixas.length;seltodas.indeterminate=marcadas>0&&marcadas<caixas.length;
+  const sem=listaAtual.filter(t=>t.valor<0&&!t.conta).length;
+  dicalote.hidden=!sem||sel.size>0;
+  if(sem)dicaloteTxt.textContent=sem+(sem===1?' despesa deste mês está sem conta.':' despesas deste mês estão sem conta.');
+}
+function montarContaLote(){
+  const atual=lotesel.value;
+  lotesel.innerHTML='<option value="__escolha__">Escolha a conta…</option><option value="">Sem conta (tirar a conta)</option>'+nomesContas.map(n=>'<option>'+esc(n)+'</option>').join('')+'<option value="'+NOVA+'">+ Nova conta ou cartão…</option>';
+  // o valor vazio ("Sem conta") nunca é preservado sozinho: a barra volta a "Escolha a conta…", para um clique distraído não tirar a conta de várias compras
+  lotesel.value=atual&&[...lotesel.options].some(o=>o.value===atual)?atual:'__escolha__';
+  lotenova.hidden=lotesel.value!==NOVA;
+}
 async function carregar(){try{
   aviso('msg');
   const l=await api('/transacoes?mes='+mesf.value);
   const r=l.filter(t=>t.valor>0).reduce((s,t)=>s+t.valor,0),d=l.filter(t=>t.valor<0).reduce((s,t)=>s-t.valor,0);
   rec.textContent=brl(r);des.textContent=brl(d);sal.textContent=brl(r-d);sal.className='num '+(r-d<0?'neg':'pos');
-  tb.innerHTML=l.length?l.map(t=>'<tr><td>'+new Date(t.data).toLocaleDateString('pt-BR')+'</td><td>'+esc(t.descricao)+'</td><td><select class="cat-sel" data-cat-id="'+t.id+'" aria-label="Categoria de '+esc(t.descricao)+'">'+optsLinha(catsDo(t.valor),t.categoria)+'</select></td><td>'+selConta(t)+'</td><td class="'+(t.valor>0?'pos':'neg')+'">'+(t.valor>0?'+':'−')+brl(Math.abs(t.valor))+'</td><td><button class="btn perigo peq" data-del="'+t.id+'">Excluir</button></td></tr>').join(''):'<tr><td colspan="6" class="vazio">Nenhuma transação neste mês.</td></tr>';
+  listaAtual=l;const lim=limitesData(),visiveis=new Set(l.filter(t=>t.valor<0).map(t=>t.id));
+  [...sel].forEach(id=>{if(!visiveis.has(id))sel.delete(id);});                      // trocou de mês: a seleção de outro mês some
+  tb.innerHTML=l.length?l.map(t=>'<tr><td>'+caixaSel(t)+'</td><td>'+campoData(t,lim)+'</td><td>'+esc(t.descricao)+'</td><td><select class="cat-sel" data-cat-id="'+t.id+'" aria-label="Categoria de '+esc(t.descricao)+'">'+optsLinha(catsDo(t.valor),t.categoria)+'</select></td><td>'+selConta(t)+'</td><td class="'+(t.valor>0?'pos':'neg')+'">'+(t.valor>0?'+':'−')+brl(Math.abs(t.valor))+'</td><td><button class="btn perigo peq" data-del="'+t.id+'">Excluir</button></td></tr>').join(''):'<tr><td colspan="7" class="vazio">Nenhuma transação neste mês.</td></tr>';
+  atualizarBarra();
 }catch(e){aviso('msg',msgErro(e),'erro');}}
 // ---------- compra parcelada: forma de pagamento, prévia e envio ----------
 const hojeISO=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
@@ -179,10 +216,50 @@ form.addEventListener('submit',async e=>{e.preventDefault();
       form.reset();restaurarForm();carregar();if(nomeConta){atualizarContas();avisarContasMudaram();}mostrarAlertas(r.alertas);
     }
   }catch(err){aviso('msg',msgErro(err),'erro');}});
-tb.addEventListener('change',async e=>{const s=e.target,id=s.dataset.catId||s.dataset.contaId;if(!id)return;
-  const corpo=s.dataset.catId?{categoria:s.value}:{conta:s.value};                    // "" = sem conta
+tb.addEventListener('change',async e=>{const c=e.target,d=c.dataset;
+  if(d.selId){const id=Number(d.selId);c.checked?sel.add(id):sel.delete(id);atualizarBarra();return;}
+  if(d.dataId){                                                                          // editar a data da compra
+    if(!c.value){await carregar();return;}
+    try{const r=await api('/transacoes/'+d.dataId,{method:'PUT',body:JSON.stringify({data:c.value})});
+      const mesNovo=c.value.slice(0,7);await carregar();
+      if(mesNovo!==mesf.value)aviso('msg','Compra movida para '+nomeDoMes(mesNovo)+'. Use o seletor de mês para vê-la.');
+      mostrarAlertas(r.alertas);}
+    catch(err){await carregar();aviso('msg',msgErro(err),'erro');}
+    return;}
+  const id=d.catId||d.contaId;if(!id)return;
+  const corpo=d.catId?{categoria:c.value}:{conta:c.value};                               // "" = sem conta
   try{const r=await api('/transacoes/'+id,{method:'PUT',body:JSON.stringify(corpo)});carregar();mostrarAlertas(r.alertas);}
-  catch(err){await carregar();aviso('msg',msgErro(err),'erro');}});   // em caso de erro volta ao valor salvo e mostra o motivo
+  catch(err){await carregar();aviso('msg',msgErro(err),'erro');}});                      // em caso de erro volta ao valor salvo e mostra o motivo
+
+// ---------- atribuir conta em lote ----------
+const marcarCaixas=()=>{tb.querySelectorAll('[data-sel-id]').forEach(c=>{c.checked=sel.has(Number(c.dataset.selId));});atualizarBarra();};
+seltodas.addEventListener('change',()=>{tb.querySelectorAll('[data-sel-id]').forEach(c=>{seltodas.checked?sel.add(Number(c.dataset.selId)):sel.delete(Number(c.dataset.selId));});marcarCaixas();});
+selsemconta.addEventListener('click',()=>{listaAtual.filter(t=>t.valor<0&&!t.conta).forEach(t=>sel.add(t.id));marcarCaixas();});
+loteLimpar.addEventListener('click',()=>{sel.clear();marcarCaixas();});
+lotesel.addEventListener('change',()=>{lotenova.hidden=lotesel.value!==NOVA;if(!lotenova.hidden)lotenova.focus();});
+loteAplicar.addEventListener('click',async()=>{
+  if(!sel.size)return;
+  if(lotesel.value==='__escolha__')return aviso('msg','Escolha a conta que será atribuída às compras selecionadas.','erro');
+  let nome=lotesel.value;
+  if(nome===NOVA){nome=lotenova.value.trim();if(!nome)return aviso('msg','Digite o nome da nova conta ou cartão.','erro');}
+  if(nome===''&&!confirm('Tirar a conta de '+sel.size+(sel.size===1?' compra?':' compras?')))return;
+  loteAplicar.disabled=true;
+  const ids=[...sel],tot={atualizadas:0,receitas_ignoradas:0,nao_encontradas:0,recusadas:[],conta:null};
+  try{
+    for(let i=0;i<ids.length;i+=200){                                                    // o servidor aceita até 200 por pedido
+      const r=await api('/transacoes/lote',{method:'PUT',body:JSON.stringify({ids:ids.slice(i,i+200),conta:nome})});
+      tot.atualizadas+=r.atualizadas;tot.receitas_ignoradas+=r.receitas_ignoradas;tot.nao_encontradas+=r.nao_encontradas;tot.recusadas.push(...r.recusadas);tot.conta=r.conta;
+    }
+    sel.clear();tot.recusadas.forEach(x=>sel.add(x.id));                                // as recusadas continuam marcadas, para tentar outra conta
+    let msg=tot.atualizadas+(tot.atualizadas===1?' compra ':' compras ')+(tot.conta?'atribuída(s) a '+tot.conta:'sem conta agora')+'.';
+    if(tot.recusadas.length){const nomes=tot.recusadas.slice(0,5).map(x=>x.descricao+' ('+x.categoria+')').join(', ')+(tot.recusadas.length>5?' e mais '+(tot.recusadas.length-5):'');
+      msg+=' '+tot.recusadas.length+' não pôde(ram) ir para '+tot.conta+', que só paga certas categorias: '+nomes+'.';}
+    await carregar();aviso('msg',msg);
+    if(nome&&!nomesContas.includes(nome)){atualizarContas();avisarContasMudaram();}
+    lotenova.value='';
+  }catch(err){await carregar();aviso('msg',msgErro(err),'erro');}
+  loteAplicar.disabled=false;
+});
 tb.addEventListener('click',async e=>{const id=e.target.dataset.del;
   if(id&&confirm('Excluir esta transação?'))try{await api('/transacoes/'+id,{method:'DELETE'});carregar();}catch(err){aviso('msg',msgErro(err),'erro');}});
 montarSeletorMes(document.getElementById('seletor-mes-hist'),()=>carregar(),{id:'mesf'});
@@ -253,7 +330,7 @@ const nomeEscolhido=(sel,novo)=>sel.value===NOVA?novo.value.trim():sel.value;
 async function atualizarContas(recarregar=true){
   const antes=JSON.stringify(nomesContas);
   try{nomesContas=(await api('/contas')).map(c=>c.nome);}catch(e){return;}
-  montarSelecaoConta(pcontasel,pconta,true);montarSelecaoConta(contasel,conta);
+  montarSelecaoConta(pcontasel,pconta,true);montarSelecaoConta(contasel,conta);montarContaLote();
   if(recarregar&&JSON.stringify(nomesContas)!==antes)carregar();                  // o histórico oferece as contas para escolher
 }
 const avisarContasMudaram=()=>{try{localStorage.setItem('sosv_contas_mudou',String(Date.now()));}catch(e){}};   // as outras abas ouvem isto

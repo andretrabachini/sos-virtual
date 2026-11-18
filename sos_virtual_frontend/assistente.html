@@ -7,21 +7,36 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/estilo.css">
-<title>Assistente — SOS Virtual</title></head>
+<title>Assistente — SOS Virtual</title>
+<style>
+.acoes-chat{white-space:normal;margin-top:.7rem;display:flex;gap:.7rem;align-items:center;flex-wrap:wrap;font-size:.88rem}
+</style></head>
 <body data-pagina="assistente">
 <div class="app"><aside id="menu"></aside>
 <main class="conteudo">
-  <header><h1>Assistente</h1><p>Converse sobre suas finanças ou registre um gasto escrevendo, por exemplo, "gastei R$ 50 no mercado".</p></header>
+  <header><h1>Assistente</h1><p>Converse sobre suas finanças ou registre um gasto escrevendo, por exemplo, "gastei R$ 50 no mercado". As respostas são calculadas no próprio sistema: seus dados não são enviados a serviços externos.</p></header>
   <section class="painel chat">
     <div class="msgs" id="msgs" aria-live="polite"><div class="msg ia">Olá! Como posso ajudar com suas finanças hoje?</div></div>
-    <div class="sugestoes" id="sug"><button type="button">Como estão meus gastos este mês?</button><button type="button">Me dê dicas para economizar</button><button type="button">Gastei R$ 50 no mercado hoje</button><button type="button">Como montar uma reserva de emergência?</button></div>
-    <form class="entrada" id="form"><label for="txt" class="rot" style="position:absolute;left:-9999px">Mensagem</label><textarea id="txt" rows="1" placeholder="Digite sua mensagem..." required></textarea><button class="btn" id="env" type="submit">Enviar</button></form>
+    <div class="sugestoes" id="sug"><button type="button">Como estão meus gastos este mês?</button><button type="button">Me dê dicas para economizar</button><button type="button">Gastei R$ 50 no mercado hoje</button><button type="button">Como montar uma reserva de emergência?</button><button type="button">Qual cartão devo usar para pagar minhas despesas?</button><button type="button">Quanto gastei com alimentação no mês passado?</button></div>
+    <form class="entrada" id="form"><label for="txt" class="rot" style="position:absolute;left:-9999px">Mensagem</label><textarea id="txt" rows="1" maxlength="500" placeholder="Digite sua mensagem..." required></textarea><button class="btn" id="env" type="submit">Enviar</button></form>
   </section>
 </main></div>
 <script src="js/app.js"></script>
 <script>
 let hist=[],ocupado=false;
 function add(t,c){const d=document.createElement('div');d.className='msg '+c;d.textContent=t;msgs.appendChild(d);msgs.scrollTop=msgs.scrollHeight;return d;}
+// "Desfazer" e "Ver em Transações" embaixo do lançamento que o assistente acabou de registrar
+function acoesDoLancamento(bolha,l){
+  const caixa=document.createElement('div');caixa.className='acoes-chat';
+  const desfazer=document.createElement('button');desfazer.type='button';desfazer.className='btn sec peq';desfazer.textContent='Desfazer';
+  const ver=document.createElement('a');ver.href='transacoes.html';ver.textContent='Ver em Transações';
+  desfazer.addEventListener('click',async()=>{
+    desfazer.disabled=true;
+    try{await api('/transacoes/'+l.id,{method:'DELETE'});caixa.remove();add('Pronto, desfiz o lançamento "'+l.descricao+'" ('+brl(Math.abs(l.valor))+').','ia');}
+    catch(e){caixa.remove();add(/não encontrado/i.test(e.message)?'Esse lançamento já não existe.':msgErro(e),'ia');}
+  });
+  caixa.append(desfazer,ver);bolha.appendChild(caixa);msgs.scrollTop=msgs.scrollHeight;
+}
 async function enviar(texto){
   texto=texto.trim();if(!texto||ocupado)return;
   ocupado=true;env.disabled=true;txt.value='';sug.hidden=true;
@@ -30,7 +45,9 @@ async function enviar(texto){
   try{
     const d=await api('/chat',{method:'POST',body:JSON.stringify({mensagem:texto,historico:hist.slice(-10)})});
     esp.textContent=d.resposta||'Não entendi, pode repetir?';hist.push({role:'assistant',content:esp.textContent});
-  }catch(e){esp.textContent=e instanceof TypeError?msgErro(e):/404|Not Found/i.test(e.message)?'O assistente ainda não está disponível no servidor (a rota /api/chat não existe).':e.message;hist.pop();}
+    if(d.lancamento)acoesDoLancamento(esp,d.lancamento);
+    mostrarAlertas(d.alertas);                                   // o mesmo pop-up de limite do formulário de Transações
+  }catch(e){esp.textContent=e instanceof TypeError?msgErro(e):/404|Not Found/i.test(e.message)?'O assistente não está disponível neste servidor (a rota /api/chat não existe). Atualize o backend.':e.message;hist.pop();}
   ocupado=false;env.disabled=false;txt.focus();
 }
 form.addEventListener('submit',e=>{e.preventDefault();enviar(txt.value);});

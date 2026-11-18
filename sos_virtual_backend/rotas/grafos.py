@@ -1,4 +1,3 @@
-from collections import defaultdict
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
@@ -7,8 +6,8 @@ from sqlalchemy.exc import IntegrityError
 from database import db
 from extensoes import limiter, usuario_id_atual
 from modelos.modelos import Aresta, ContaCategoria, No, Parcelamento, Transacao
-from servicos.financeiro import CATEGORIAS, limites_do_mes
-from servicos.grafos_service import calcular_roteamento_otimizado
+from servicos.financeiro import CATEGORIAS
+from servicos.grafos_dados import calcular_do_mes as _calcular, categorias_por_conta as _categorias_por_conta, contas_do_usuario as _contas_do_usuario, movimentos_do_mes as _movimentos_do_mes
 from servicos.tempo import mes_atual
 from validacao import VALOR_MAX, corpo_json, erro, mes_valido, numero, texto
 
@@ -18,18 +17,6 @@ MAX_CONTAS = 20   # mantem o grafo pequeno e a resposta rapida
 
 
 # ------------------------------------------------------------------ contas (nos do tipo 'conta')
-
-def _contas_do_usuario(usuario_id):
-    return No.query.filter_by(usuario_id=usuario_id, tipo="conta").order_by(No.nome).all()
-
-
-def _categorias_por_conta(usuario_id):
-    """{conta_id: [categorias que ela aceita]}; conta fora do mapa = aceita qualquer categoria"""
-    mapa = defaultdict(list)
-    for linha in ContaCategoria.query.filter_by(usuario_id=usuario_id).all():
-        mapa[linha.conta_id].append(linha.categoria)
-    return {cid: sorted(cats, key=CATEGORIAS.index) for cid, cats in mapa.items()}
-
 
 def _conta_dict(conta, mapa):
     dados = conta.para_dict()
@@ -180,41 +167,6 @@ def excluir_conta(conta_id):
 
 
 # ------------------------------------------------------------------ grafo e otimizacao
-
-def _movimentos_do_mes(usuario_id, mes):
-    """
-    despesas do mes separadas em: ja registradas em uma conta (fixos) e ainda sem conta (pendentes).
-    so as pendentes sao otimizadas; as registradas ja aconteceram e consomem o limite da conta
-    """
-    inicio, fim = limites_do_mes(mes)
-    fixos, pendentes = defaultdict(float), defaultdict(float)
-    for t in Transacao.query.filter(Transacao.usuario_id == usuario_id, Transacao.data >= inicio,
-                                    Transacao.data < fim, Transacao.valor < 0).all():
-        if t.conta_id:
-            fixos[(t.conta_id, t.categoria)] += -t.valor
-        else:
-            pendentes[t.categoria] += -t.valor
-    return ([{"conta_id": c, "categoria": k, "valor": round(v, 2)} for (c, k), v in fixos.items()],
-            {k: round(v, 2) for k, v in pendentes.items()})
-
-
-def _calcular(usuario_id, mes, despesas=None):
-    """despesas=None usa o que esta sem conta no mes; um dict simula outros valores para essa parte"""
-    mapa = _categorias_por_conta(usuario_id)
-    contas = [
-        {"id": c.id, "nome": c.nome, "capacidade": c.capacidade, "custo": c.custo or 0.0,
-         "categorias": mapa.get(c.id, [])}
-        for c in _contas_do_usuario(usuario_id)
-    ]
-    fixos, pendentes = _movimentos_do_mes(usuario_id, mes)
-    resultado = calcular_roteamento_otimizado(contas, pendentes if despesas is None else despesas, fixos)
-
-    registradas = defaultdict(float)
-    for f in fixos:
-        registradas[f["categoria"]] += f["valor"]
-    resultado.update({"mes": mes, "pendentes": pendentes, "registradas": {k: round(v, 2) for k, v in registradas.items()}})
-    return resultado
-
 
 def _mes_da_requisicao(valor):
     mes = valor or mes_atual()
