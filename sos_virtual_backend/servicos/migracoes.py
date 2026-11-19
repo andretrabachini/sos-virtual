@@ -82,4 +82,21 @@ def aplicar_migracoes(db):
         if ligadas:
             aplicadas.append(f"{ligadas} lançamento(s) de compras parceladas antigas ligado(s) ao cartão em que foram cadastrados")
 
+    # usuarios.saldo_inicial e usuarios.saldo_inicial_mes: o saldo com que o usuario comecou
+    colunas = _colunas(engine, "usuarios")
+    if colunas is not None:
+        novas = [(nome, ddl) for nome, ddl in (("saldo_inicial", "FLOAT DEFAULT 0"), ("saldo_inicial_mes", "VARCHAR(7) NULL")) if nome not in colunas]
+        try:
+            with engine.begin() as con:
+                for nome, ddl in novas:
+                    con.execute(text(f"ALTER TABLE usuarios ADD COLUMN {nome} {ddl}"))
+        except Exception as erro:
+            raise RuntimeError(
+                "Nao consegui atualizar o banco automaticamente. Rode isto no MySQL e suba o servidor de novo:\n"
+                "  ALTER TABLE usuarios ADD COLUMN saldo_inicial FLOAT DEFAULT 0;\n"
+                "  ALTER TABLE usuarios ADD COLUMN saldo_inicial_mes VARCHAR(7) NULL;\n"
+                f"(erro original: {erro})"
+            ) from erro
+        aplicadas += [f"usuarios.{nome}" for nome, _ in novas]
+
     return aplicadas

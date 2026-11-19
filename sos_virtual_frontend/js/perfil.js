@@ -92,15 +92,19 @@
       '<div class="campo"><label for="cf-nome">Nome</label><input id="cf-nome" maxlength="120" autocomplete="name"></div>' +
       '<div class="campo"><label for="cf-email">E-mail</label><input id="cf-email" type="email" disabled><div class="rot" style="margin-top:.3rem">O e-mail é o seu login e não pode ser alterado aqui.</div></div>' +
       '<div class="campo"><label for="cf-renda">Renda mensal (R$)</label><input id="cf-renda" type="number" min="0" step="0.01" placeholder="0,00"><div class="rot" style="margin-top:.3rem">Usada no painel para calcular quanto sobra livre depois das parcelas. Deixe em branco se preferir não informar.</div></div>' +
+      '<div class="campo"><label for="cf-saldo">Saldo inicial (R$)</label><input id="cf-saldo" type="number" step="0.01" placeholder="0,00"><div class="rot" style="margin-top:.3rem">Se você já tinha dinheiro em conta antes de usar o sistema, informe quanto tinha no início do mês abaixo. A partir daí, o saldo de cada mês continua do anterior. Pode ser negativo. Deixe em branco para o saldo começar do primeiro lançamento.</div></div>' +
+      '<div class="campo"><label for="cf-saldo-mes">Esse saldo era do início de qual mês?</label><input id="cf-saldo-mes" type="month" min="2000-01" max="2100-12" placeholder="AAAA-MM"></div>' +
       '<div id="cf-msg" class="aviso" hidden role="status"></div>' +
       '<button class="btn" type="submit">Salvar alterações</button></form>';
     const nome = painel.querySelector('#cf-nome'), email = painel.querySelector('#cf-email'), renda = painel.querySelector('#cf-renda');
+    const saldo = painel.querySelector('#cf-saldo'), saldoMes = painel.querySelector('#cf-saldo-mes');
+    const mostrarSaldo = d => { saldo.value = d.saldo_inicial_mes ? d.saldo_inicial : ''; saldoMes.value = d.saldo_inicial_mes || ''; };
     let alterado = false;
-    nome.value = u.nome || ''; email.value = u.email || ''; renda.value = u.renda_mensal || '';
-    [nome, renda].forEach(c => c.addEventListener('input', () => { alterado = true; }));
+    nome.value = u.nome || ''; email.value = u.email || ''; renda.value = u.renda_mensal || ''; mostrarSaldo(u);
+    [nome, renda, saldo, saldoMes].forEach(c => c.addEventListener('input', () => { alterado = true; }));
     api('/auth/perfil').then(d => {                           // confere com o servidor, sem atropelar quem já começou a digitar
       salvarUsuario(d);
-      if (!alterado) { nome.value = d.nome || ''; renda.value = d.renda_mensal || ''; }
+      if (!alterado) { nome.value = d.nome || ''; renda.value = d.renda_mensal || ''; mostrarSaldo(d); }
       email.value = d.email || '';
     }).catch(() => {});
     painel.querySelector('#cf-perfil').addEventListener('submit', async e => {
@@ -108,8 +112,15 @@
       const novoNome = nome.value.trim(), valor = renda.value === '' ? 0 : parseFloat(renda.value);
       if (novoNome.length < 2) return mensagem(painel, 'Informe seu nome (no mínimo 2 caracteres).', 'erro');
       if (!(valor >= 0)) return mensagem(painel, 'A renda não pode ser negativa.', 'erro');
+      // saldo inicial: valor e mês andam juntos; os dois em branco removem o saldo inicial
+      const temValor = saldo.value.trim() !== '', temMes = saldoMes.value.trim() !== '';
+      if (temValor && !temMes) return mensagem(painel, 'Informe a partir de qual mês vale o saldo inicial.', 'erro');
+      if (temMes && !temValor) return mensagem(painel, 'Informe o valor do saldo inicial (use 0 se você começou sem dinheiro).', 'erro');
+      if (temValor && !Number.isFinite(parseFloat(saldo.value))) return mensagem(painel, 'Saldo inicial inválido.', 'erro');
+      const corpo = { nome: novoNome, renda_mensal: valor, saldo_inicial_mes: temMes ? saldoMes.value.trim() : null };
+      if (temValor) corpo.saldo_inicial = parseFloat(saldo.value);
       try {
-        const d = await api('/auth/perfil', { method: 'PUT', body: JSON.stringify({ nome: novoNome, renda_mensal: valor }) });
+        const d = await api('/auth/perfil', { method: 'PUT', body: JSON.stringify(corpo) });
         salvarUsuario(d); atualizarNomeNoMenu(); alterado = false;
         mensagem(painel, 'Dados salvos.', 'ok');
       } catch (err) { mensagem(painel, msgErro(err), 'erro'); }

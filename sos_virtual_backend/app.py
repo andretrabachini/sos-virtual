@@ -126,6 +126,7 @@ from rotas.grafos import grafos_bp
 from rotas.parcelamentos import parcelamentos_bp
 from rotas.modelos import modelos_bp
 from rotas.chat import chat_bp
+from rotas.saldo import saldo_bp
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(transacoes_bp)
@@ -137,6 +138,7 @@ app.register_blueprint(grafos_bp)
 app.register_blueprint(parcelamentos_bp)
 app.register_blueprint(modelos_bp)
 app.register_blueprint(chat_bp)
+app.register_blueprint(saldo_bp)
 
 if __name__ == "__main__":
     with app.app_context():

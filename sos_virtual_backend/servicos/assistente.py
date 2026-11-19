@@ -22,12 +22,13 @@ from servicos.financeiro import gastos_por_categoria, limites_do_mes, resumo_men
 from servicos.grafos_dados import calcular_do_mes
 from servicos.importacao import projecao_mensal
 from servicos.lancamentos import data_da_compra, gravar_transacao
+from servicos.saldo import resumo_com_saldo
 from servicos.tempo import hoje
 
 brl, nome_do_mes, percentual = T.brl, T.nome_do_mes, T.percentual
 
 EXEMPLO_GASTO = "«gastei R$ 50 no mercado»"
-INTENCOES_COM_PERIODO = {"resumo", "receitas", "maiores", "ultimas", "alertas", "otimizar"}
+INTENCOES_COM_PERIODO = {"resumo", "saldo", "receitas", "maiores", "ultimas", "alertas", "otimizar"}
 JANELA_DE_CONTEXTO = 3        # quantas perguntas anteriores do usuario valem para completar um "e em outubro?"
 
 
@@ -138,12 +139,20 @@ def _valor_sem_verbo(valor):
 # =========================================================================== consultas
 
 def _resumo(ctx, mes, **_):
-    r = resumo_mensal(ctx.uid, mes)
+    s = resumo_com_saldo(ctx.uid, mes)
+    r = {"receita": s["receita"], "despesa": s["despesa"], "saldo": s["saldo_do_mes"]}
     nome = nome_do_mes(mes)
     if not r["receita"] and not r["despesa"]:
         return _resp(f"Ainda não há lançamentos em {nome}. Registre um gasto escrevendo, por exemplo, {EXEMPLO_GASTO}.", "resumo")
-    linhas = [f"Resumo de {nome}:", f"• Receitas: {brl(r['receita'])}", f"• Despesas: {brl(r['despesa'])}",
-              f"• Saldo: {brl(r['saldo'])}" + (" (no vermelho)" if r["saldo"] < 0 else "")]
+    # o saldo continua de um mes para o outro: so mostra o "inicio" e o "fim" quando ha algo que veio do passado
+    com_saldo = s["saldo_anterior"] is not None and (s["saldo_anterior"] != 0 or s["saldo_inicial_informado"])
+    linhas = [f"Resumo de {nome}:"]
+    if com_saldo:
+        linhas.append(f"• Saldo no início do mês: {brl(s['saldo_anterior'])}")
+    linhas += [f"• Receitas: {brl(r['receita'])}", f"• Despesas: {brl(r['despesa'])}",
+               f"• Saldo do mês: {brl(r['saldo'])}" + (" (no vermelho)" if r["saldo"] < 0 else "")]
+    if com_saldo:
+        linhas.append(f"• Saldo no fim do mês: {brl(s['saldo_final'])}" + (" (no vermelho)" if s["saldo_final"] < 0 else ""))
     categorias = sorted(gastos_por_categoria(ctx.uid, mes).items(), key=lambda x: -x[1])[:3]
     if categorias:
         linhas.append("Onde mais gastou: " + "; ".join(f"{c} {brl(v)} ({percentual(v, r['despesa'])}%)" for c, v in categorias) + ".")
@@ -159,6 +168,24 @@ def _resumo(ctx, mes, **_):
         if gastos.get(alerta.categoria, 0.0) >= alerta.limite:
             linhas.append(f"Atenção: {alerta.categoria} passou do limite ({brl(gastos[alerta.categoria])} de {brl(alerta.limite)}).")
     return _resp("\n".join(linhas), "resumo")
+
+
+def _saldo(ctx, mes, **_):
+    s = resumo_com_saldo(ctx.uid, mes)
+    nome = nome_do_mes(mes)
+    if s["saldo_final"] is None:
+        desde = nome_do_mes(ctx.usuario.saldo_inicial_mes)
+        return _resp(f"Não sei o saldo de {nome}: o saldo inicial que você informou vale a partir de {desde}. "
+                     f"Em {nome}, o saldo do mês (o que entrou menos o que saiu) foi {brl(s['saldo_do_mes'])}.", "saldo")
+    if not s["receita"] and not s["despesa"] and not s["saldo_anterior"] and not s["saldo_inicial_informado"]:
+        return _resp(f"Ainda não há lançamentos até {nome} para calcular o saldo. Registre uma receita ou um gasto, por exemplo, {EXEMPLO_GASTO}. "
+                     "Se você já tinha dinheiro em conta antes de usar o sistema, informe o saldo inicial em Minha conta > Perfil.", "saldo")
+    verbo = "está em" if mes == ctx.mes_atual else "ficou em" if mes < ctx.mes_atual else "deve ficar em"
+    texto = (f"Em {nome}: começou com {brl(s['saldo_anterior'])}, entraram {brl(s['receita'])} e saíram {brl(s['despesa'])}. "
+             f"O saldo {verbo} {brl(s['saldo_final'])}" + (" (no vermelho)." if s["saldo_final"] < 0 else "."))
+    if not s["saldo_inicial_informado"]:
+        texto += "\nSe você já tinha dinheiro em conta antes de usar o sistema, informe o saldo inicial em Minha conta > Perfil para o saldo bater com o do seu banco."
+    return _resp(texto, "saldo")
 
 
 def _gasto_categoria(ctx, mes, categoria, **_):
@@ -390,7 +417,7 @@ EDUCACAO = {
 
 AJUDA = ("Posso ajudar com:\n"
          f"• Registrar gastos e receitas: {EXEMPLO_GASTO}, «recebi R$ 3.000 de salário», «paguei 120 de luz ontem no cartão Itaú».\n"
-         "• Seus números: «como estão meus gastos este mês?», «quanto gastei com alimentação no mês passado?», «maiores gastos», «últimas transações», «quanto recebi em outubro?».\n"
+         "• Seus números: «como estão meus gastos este mês?», «qual meu saldo?», «quanto gastei com alimentação no mês passado?», «maiores gastos», «últimas transações», «quanto recebi em outubro?».\n"
          "• Metas, alertas e parcelas: «minhas metas», «meus alertas», «tenho parcelas nos próximos meses?».\n"
          "• Qual conta usar: «qual cartão devo usar para pagar minhas despesas?».\n"
          "• Dicas e educação financeira: «me dê dicas para economizar», «como montar uma reserva de emergência?», «como funciona a regra 50/30/20?».\n"
@@ -410,7 +437,7 @@ def _tratar(ctx, intencao, msg, anterior=None):
         return _gasto_categoria(ctx, mes=mes, categoria=categoria)
     if intencao in EDUCACAO:
         return _resp(EDUCACAO[intencao], intencao)
-    simples = {"resumo": _resumo, "receitas": _receitas, "ultimas": _ultimas, "maiores": _maiores, "metas": _metas, "alertas": _alertas,
+    simples = {"resumo": _resumo, "saldo": _saldo, "receitas": _receitas, "ultimas": _ultimas, "maiores": _maiores, "metas": _metas, "alertas": _alertas,
                "parcelas": _parcelas, "otimizar": _otimizar, "dicas": _dicas, "reserva": _reserva}
     if intencao in simples:
         return simples[intencao](ctx, mes=mes, categoria=categoria)

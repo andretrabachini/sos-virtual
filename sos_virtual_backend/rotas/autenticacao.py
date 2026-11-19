@@ -16,6 +16,8 @@ from extensoes import limiter, usuario_id_atual
 from modelos.modelos import Alerta, Aresta, ContaCategoria, Meta, No, Parcelamento, RedefinicaoSenha, Transacao, Usuario
 from servicos.contas import nomes_das_contas, transacao_com_conta
 from servicos.email_service import enviar_email_redefinicao, enviar_email_senha_alterada
+from servicos.tempo import mes_atual
+from validacao import VALOR_MAX, mes_valido
 
 # agrupa todas as rotas de autenticacao neste blueprint
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
@@ -155,18 +157,41 @@ def atualizar_perfil():
     if not usuario:
         return _erro("usuário não encontrado", 404)
 
-    # atualiza so os campos que foram enviados, validando cada um
+    # valida TUDO antes de gravar qualquer coisa: um pedido com um campo invalido nao altera nenhum outro
+    nome = renda = saldo = None
     if "nome" in dados:
         nome = _texto(dados["nome"])
         if not 2 <= len(nome) <= 120:
             return _erro("nome inválido (2 a 120 caracteres)", 400)
-        usuario.nome = nome
 
     if "renda_mensal" in dados:
         renda = _numero(dados["renda_mensal"], 0, RENDA_MAX)
         if renda is None:
             return _erro("renda mensal inválida", 400)
+
+    # saldo inicial: "no INICIO do mes X eu tinha R$ Y". o mes vazio (null ou "") tira o saldo inicial
+    if "saldo_inicial" in dados or "saldo_inicial_mes" in dados:
+        mes_ref = dados.get("saldo_inicial_mes", usuario.saldo_inicial_mes)
+        if "saldo_inicial_mes" in dados and mes_ref in (None, ""):
+            saldo = (0.0, None)
+        else:
+            valor = usuario.saldo_inicial or 0.0
+            if "saldo_inicial" in dados:
+                valor = _numero(dados["saldo_inicial"], -VALOR_MAX, VALOR_MAX)
+                if valor is None:
+                    return _erro("saldo inicial inválido", 400)
+            if mes_ref in (None, ""):
+                mes_ref = mes_atual()                      # informou o valor sem dizer o mes: vale a partir do mes atual
+            if not mes_valido(mes_ref):
+                return _erro("mês do saldo inicial inválido (use AAAA-MM)", 400)
+            saldo = (round(valor, 2), mes_ref)
+
+    if nome is not None:
+        usuario.nome = nome
+    if renda is not None:
         usuario.renda_mensal = renda
+    if saldo is not None:
+        usuario.saldo_inicial, usuario.saldo_inicial_mes = saldo
 
     db.session.commit()
     return jsonify(usuario.para_dict())

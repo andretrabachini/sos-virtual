@@ -73,7 +73,7 @@ def colunas(banco):
 
 def test_migracao_acrescenta_a_coluna_sem_perder_dados(banco_antigo):
     assert "conta_id" not in colunas(banco_antigo)
-    assert aplicar_migracoes(banco_antigo) == ["transacoes.conta_id"]
+    assert aplicar_migracoes(banco_antigo) == ["transacoes.conta_id", "usuarios.saldo_inicial", "usuarios.saldo_inicial_mes"]
     assert "conta_id" in colunas(banco_antigo)
     with banco_antigo.engine.connect() as con:
         linha = con.execute(text("SELECT descricao, valor, categoria, conta_id FROM transacoes")).fetchone()
@@ -137,3 +137,33 @@ def test_migracao_nao_repete_o_preenchimento(banco_com_parcelas):
         con.execute(text("UPDATE transacoes SET conta_id = NULL WHERE id = 2"))     # o usuario "tirou" a conta depois
     assert aplicar_migracoes(banco_com_parcelas) == []
     assert conta_das_transacoes(banco_com_parcelas)[2] is None                      # e a migracao nao desfaz a escolha dele
+
+
+# ------------------------------------------------------------- colunas do saldo inicial do usuario
+def colunas_de(banco, tabela):
+    with banco.engine.connect() as con:
+        return [linha[1] for linha in con.execute(text(f"PRAGMA table_info({tabela})"))]
+
+
+def test_migracao_acrescenta_as_colunas_do_saldo_inicial_sem_perder_o_usuario(banco_antigo):
+    assert "saldo_inicial" not in colunas_de(banco_antigo, "usuarios")
+    aplicar_migracoes(banco_antigo)
+    assert {"saldo_inicial", "saldo_inicial_mes"} <= set(colunas_de(banco_antigo, "usuarios"))
+    with banco_antigo.engine.connect() as con:
+        linha = con.execute(text("SELECT nome, saldo_inicial, saldo_inicial_mes FROM usuarios")).fetchone()
+    assert tuple(linha) == ("Ana", 0.0, None)                    # o usuario antigo continua la, sem saldo inicial (default 0)
+
+
+def test_migracao_do_saldo_so_acrescenta_a_coluna_que_falta(banco_antigo):
+    with banco_antigo.engine.begin() as con:
+        con.execute(text("ALTER TABLE usuarios ADD COLUMN saldo_inicial FLOAT DEFAULT 0"))      # ja existia so uma das duas
+    resultado = aplicar_migracoes(banco_antigo)
+    assert "usuarios.saldo_inicial_mes" in resultado and "usuarios.saldo_inicial" not in resultado
+    assert aplicar_migracoes(banco_antigo) == []
+
+
+def test_banco_sem_tabela_de_usuarios_nao_da_erro_no_saldo(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'sem_usuarios.db'}")
+    with engine.begin() as con:
+        con.execute(text("CREATE TABLE outra (id INTEGER PRIMARY KEY)"))
+    assert aplicar_migracoes(BancoFalso(engine)) == []

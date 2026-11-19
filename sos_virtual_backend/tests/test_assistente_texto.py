@@ -226,7 +226,7 @@ def test_categoria(frase, categoria):
 
 # ============================================================================= intencao
 @pytest.mark.parametrize("frase,intencao", [
-    ("Como estão meus gastos este mês?", "resumo"), ("resumo do mês", "resumo"), ("qual meu saldo?", "resumo"), ("quanto gastei este mês?", "resumo"), ("quanto ainda posso gastar?", "resumo"),
+    ("Como estão meus gastos este mês?", "resumo"), ("resumo do mês", "resumo"), ("qual meu saldo?", "saldo"), ("quanto sobrou este mês?", "saldo"), ("quanto tenho na conta?", "saldo"), ("quanto gastei este mês?", "resumo"), ("quanto ainda posso gastar?", "resumo"),
     ("Me dê dicas para economizar", "dicas"), ("como gastar menos?", "dicas"), ("quero reduzir meus gastos", "dicas"),
     ("Como montar uma reserva de emergência?", "reserva"), ("preciso de uma reserva de emergencia", "reserva"),
     ("Qual cartão devo usar?", "otimizar"), ("como pagar minhas despesas?", "otimizar"), ("onde tem cashback?", "otimizar"), ("me ajuda a escolher qual cartão usar", "otimizar"),

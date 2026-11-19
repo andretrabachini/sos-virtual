@@ -351,6 +351,7 @@ INTENCOES = [
     ("maiores", r"\bmaiores? (gasto|despesa|compra)s?\b|\bonde (eu )?(mais )?(gast\w+|esta indo)\b|\bem que (eu )?(mais )?gast\w+|\bpara onde (foi|vai|esta indo) (o |meu )?dinheiro\b|\bmais gast\w+"),
     ("dicas", r"\bdicas?\b|\beconomiz\w*|\beconomia\b|\bgastar menos\b|\b(cortar|reduzir|diminuir) (os |meus )?(gastos?|despesas?)\b|\bpoupar\b|\bguardar dinheiro\b|\bsobrar dinheiro\b"),
     ("receitas", r"\bquanto (eu )?(recebi|ganhei|entrou)\b|\bminhas? (receita|renda|entrada)s?\b|\bo que (eu )?(recebi|ganhei)\b"),
+    ("saldo", r"\bsaldo\b|\bquanto (eu )?(tenho|sobrou|sobra|resta|restou|vou ter)\b|\bquanto (dinheiro )?(tenho|sobrou|sobra)\b|\btenho dinheiro\b"),
     ("resumo", r"\bresumo\b|\bbalanco\b|\bcomo (estao|esta|anda|andam|vao|vai) (os |as |meus |minhas |o |a )?(meus |minhas )?(gastos?|financas|contas|dinheiro|saldo|despesas|mes)\b|\bsaldo\b|\bcomo estou\b|\bsituacao financeira\b|\bquanto (eu )?(gastei|gasto|paguei)\b|\btotal (de |dos )?(gastos|despesas)\b|\bgastos? (do|de|deste|desse|neste) mes\b|\bminhas despesas\b|\bmeus gastos\b|\bquanto (eu )?(ainda )?(posso|consigo) gastar\b"),
     ("ajuda", r"\b(ajuda|ajudar|o que (voce|vc|tu) (faz|pode|sabe)|como (voce|vc) funciona|como funciona|comandos?|funcionalidades|help)\b|\bo que (eu )?posso (te )?(pedir|perguntar|fazer)\b"),
     ("agradecimento", r"\b(obrigad[oa]|valeu|vlw|brigad[oa]|agradeco)\b"),

@@ -21,6 +21,11 @@ class Usuario(db.Model):
     # data e hora em que o usuario aceitou o tratamento de dados (prova do consentimento LGPD)
     lgpd_aceito_em = db.Column(db.DateTime, nullable=True)
 
+    # saldo inicial (opcional): "no INICIO do mes X eu tinha R$ Y em conta". a partir dele o sistema soma o que entra e sai
+    # sem ele, o saldo de cada mes e so o que foi registrado desde o primeiro lancamento
+    saldo_inicial = db.Column(db.Float, default=0.0)
+    saldo_inicial_mes = db.Column(db.String(7), nullable=True)           # "AAAA-MM"
+
     # relacionamentos: um usuario tem varias transacoes, metas e alertas
     # cascade garante que, ao excluir a conta, todos os dados dela somem junto (direito de eliminacao da LGPD)
     transacoes = db.relationship("Transacao", backref="usuario", lazy=True, cascade="all, delete-orphan")
@@ -37,7 +42,9 @@ class Usuario(db.Model):
             "id": self.id,
             "nome": self.nome,
             "email": self.email,
-            "renda_mensal": self.renda_mensal
+            "renda_mensal": self.renda_mensal,
+            "saldo_inicial": self.saldo_inicial or 0.0,
+            "saldo_inicial_mes": self.saldo_inicial_mes
         }
 
 

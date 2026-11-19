@@ -212,7 +212,8 @@ def test_resumo_do_mes(cliente, ana):
     popular(cliente, ana)
     r = diz(cliente, ana, "Como estão meus gastos este mês?")
     texto = r["resposta"]
-    assert r["intencao"] == "resumo" and "Receitas: R$ 5.000,00" in texto and "Despesas: R$ 2.000,00" in texto and "Saldo: R$ 3.000,00" in texto
+    assert r["intencao"] == "resumo" and "Receitas: R$ 5.000,00" in texto and "Despesas: R$ 2.000,00" in texto and "Saldo do mês: R$ 3.000,00" in texto
+    assert "Saldo no início do mês: -R$ 1.000,00" in texto and "Saldo no fim do mês: R$ 2.000,00" in texto          # o -1.000 do mes passado continua
     assert "Moradia R$ 1.600,00 (80%)" in texto and "Alimentação R$ 300,00 (15%)" in texto
     assert "as despesas subiram 100%" in texto                                         # 1.000 no mes passado -> 2.000
     assert "40% da renda mensal informada (R$ 5.000,00)" in texto
@@ -221,7 +222,7 @@ def test_resumo_do_mes(cliente, ana):
 def test_resumo_no_vermelho(cliente, ana):
     gasto(cliente, ana, "Salário", 1000)
     gasto(cliente, ana, "Aluguel", -1500)
-    assert "Saldo: -R$ 500,00 (no vermelho)" in diz(cliente, ana, "resumo")["resposta"]
+    assert "Saldo do mês: -R$ 500,00 (no vermelho)" in diz(cliente, ana, "resumo")["resposta"]
 
 
 def test_resumo_de_mes_sem_dados(cliente, ana):
@@ -435,3 +436,51 @@ def test_o_texto_digitado_nao_vira_comando(cliente, ana):
 def test_numeros_dentro_de_codigo_deixam_a_frase_ambigua_e_nada_e_salvo(cliente, ana):
     r = diz(cliente, ana, "gastei 50 em <script>alert(1)</script>")
     assert r["lancamento"] is None and lancamentos(cliente, ana) == [] and "mais de um valor" in r["resposta"]
+
+
+# ===================================================================================== saldo
+def test_saldo_comeca_o_mes_com_o_que_sobrou_do_anterior(cliente, ana):
+    gasto(cliente, ana, "Salário", 3000, data=iso(MES_PASSADO()))
+    gasto(cliente, ana, "Compras", -2000, data=iso(MES_PASSADO()))
+    gasto(cliente, ana, "Mercado", -300)
+    r = diz(cliente, ana, "qual meu saldo?")
+    assert r["intencao"] == "saldo"
+    assert "começou com R$ 1.000,00, entraram R$ 0,00 e saíram R$ 300,00. O saldo está em R$ 700,00." in r["resposta"]
+    assert "informe o saldo inicial em Minha conta" in r["resposta"]
+
+
+def test_saldo_do_mes_passado_e_a_continuacao(cliente, ana):
+    gasto(cliente, ana, "Salário", 3000, data=iso(MES_PASSADO()))
+    gasto(cliente, ana, "Compras", -2000, data=iso(MES_PASSADO()))
+    gasto(cliente, ana, "Mercado", -300)
+    assert "O saldo ficou em R$ 1.000,00." in diz(cliente, ana, "qual foi o meu saldo no mês passado?")["resposta"]
+    h = [{"role": "user", "content": "qual meu saldo?"}, {"role": "assistant", "content": "..."}, {"role": "user", "content": "e no mês passado?"}]
+    assert "O saldo ficou em R$ 1.000,00." in diz(cliente, ana, "e no mês passado?", h)["resposta"]
+
+
+def test_saldo_no_vermelho_e_sem_lancamentos(cliente, ana):
+    assert "Ainda não há lançamentos" in diz(cliente, ana, "qual meu saldo?")["resposta"]
+    gasto(cliente, ana, "Dívida", -800)
+    assert "O saldo está em -R$ 800,00 (no vermelho)." in diz(cliente, ana, "quanto tenho na conta?")["resposta"]
+
+
+def test_saldo_com_saldo_inicial_informado(cliente, ana):
+    mes_atual = hoje().strftime("%Y-%m")
+    cliente.put("/api/auth/perfil", headers=ana, json={"saldo_inicial": 3000, "saldo_inicial_mes": mes_atual})
+    gasto(cliente, ana, "Mercado", -300)
+    r = diz(cliente, ana, "qual meu saldo?")["resposta"]
+    assert "começou com R$ 3.000,00" in r and "O saldo está em R$ 2.700,00." in r and "informe o saldo inicial" not in r        # ja informou: nao repete a dica
+    resumo = diz(cliente, ana, "como estão meus gastos este mês?")["resposta"]
+    assert "Saldo no início do mês: R$ 3.000,00" in resumo and "Saldo no fim do mês: R$ 2.700,00" in resumo
+
+
+def test_saldo_de_mes_anterior_ao_saldo_inicial(cliente, ana):
+    cliente.put("/api/auth/perfil", headers=ana, json={"saldo_inicial": 3000, "saldo_inicial_mes": hoje().strftime("%Y-%m")})
+    r = diz(cliente, ana, "qual meu saldo no mês passado?")["resposta"]
+    assert r.startswith("Não sei o saldo de") and "o saldo inicial que você informou vale a partir de" in r
+
+
+def test_resumo_sem_saldo_do_passado_nao_polui_o_texto(cliente, ana):
+    gasto(cliente, ana, "Salário", 1000)
+    texto = diz(cliente, ana, "resumo do mês")["resposta"]
+    assert "Saldo no início do mês" not in texto and "Saldo do mês: R$ 1.000,00" in texto

@@ -4,6 +4,7 @@ from flask_jwt_extended import jwt_required
 from extensoes import usuario_id_atual
 from modelos.modelos import Meta, Transacao
 from servicos.contas import nomes_das_contas, transacao_com_conta
+from servicos.saldo import resumo_com_saldo
 from servicos.financeiro import gastos_por_categoria, limites_do_mes, resumo_mensal
 from servicos.tempo import mes_atual
 from validacao import erro, mes_valido
@@ -21,8 +22,9 @@ def dados_dashboard():
     if not mes_valido(mes):
         return erro("mês inválido (use o formato AAAA-MM)")
 
-    # pega o resumo financeiro do mes escolhido
+    # pega o resumo financeiro do mes escolhido (o saldo continua de um mes para o outro)
     resumo = resumo_mensal(usuario_id, mes)
+    saldos = resumo_com_saldo(usuario_id, mes)
 
     # gasto separado por categoria para montar o grafico no front
     por_categoria = gastos_por_categoria(usuario_id, mes)
@@ -45,7 +47,9 @@ def dados_dashboard():
         "mes": mes,
         "receita_total": resumo["receita"],
         "despesa_total": resumo["despesa"],
-        "saldo": resumo["saldo"],
+        "saldo": resumo["saldo"],                      # so o que aconteceu no mes
+        "saldo_anterior": saldos["saldo_anterior"],    # saldo no inicio do mes (null se desconhecido)
+        "saldo_final": saldos["saldo_final"],          # saldo no fim do mes = anterior + receitas - despesas
         "por_categoria": por_categoria,
         "transacoes_recentes": [transacao_com_conta(t, nomes) for t in recentes],
         "metas": [m.para_dict() for m in metas]
